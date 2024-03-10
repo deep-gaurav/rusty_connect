@@ -119,7 +119,9 @@ pub fn refresh_devices(request_client: &reqwest::Client, app: AppHandle, port: u
                     }
                 }
             }
-            Err(_) => todo!(),
+            Err(err) => {
+                warn!("Couldnt refresh devices {err:?}")
+            }
         }
     });
 }

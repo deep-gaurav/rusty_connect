@@ -58,15 +58,16 @@ fn setup(app: &mut App) -> Result<(), Box<dyn Error>> {
     if let Err(err) = MAIN_URL.set(main_url) {
         warn!("Cant set mainurl {err:?}")
     }
-    let handle = app.handle();
-    let handle2 = app.handle();
+    let handle = app.app_handle();
+    let handle2 = app.app_handle();
     let gqlport = GQL_PORT;
     tauri::async_runtime::spawn(async move {
         info!("Running GQL Server on port {gqlport}");
         if let Err(err) = run_server(&handle, gqlport).await {
             warn!("GQL Server stopped with error {err:?}")
         }
-        info!("GQL Server Stopped")
+        info!("GQL Server Stopped");
+        handle.exit(2);
     });
     tauri::async_runtime::spawn(async move {
         info!("Running GQL Subscription Listener from port {gqlport}");
@@ -74,7 +75,8 @@ fn setup(app: &mut App) -> Result<(), Box<dyn Error>> {
         if let Err(err) = listen_to_server(gqlport, &handle2).await {
             warn!("GQL Listener stopped with error {err:?}");
         }
-        info!("GQL Listener stopped")
+        info!("GQL Listener stopped");
+        handle2.exit(2)
     });
     Ok(())
 }

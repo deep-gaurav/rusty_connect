@@ -16,6 +16,12 @@ pub async fn run_server(apphandle: &AppHandle, port: u32) -> anyhow::Result<()> 
         .path_resolver()
         .app_local_data_dir()
         .ok_or(anyhow!("No local dir"))?;
+    if !tokio::fs::try_exists(&local_app_dir).await? {
+        tokio::fs::create_dir_all(&local_app_dir).await?;
+    }
+    if !tokio::fs::metadata(&local_app_dir).await?.is_dir() {
+        return Err(anyhow::anyhow!("Local app dir not directory"));
+    }
     let config_path = local_app_dir.join("conf.json");
     let cert_path = local_app_dir.join("cert");
     let key_path = local_app_dir.join("key");
