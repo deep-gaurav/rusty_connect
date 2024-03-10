@@ -62,8 +62,8 @@ query Device($id:String!){
   }
 }
 
-mutation Pair($id:String!){
-  pair(id:$id){
+mutation Pair($id:String!, $pair:Boolean!){
+  pair(id:$id, pair:$pair){
     ...DeviceWithStateFields
   }
 }

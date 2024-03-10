@@ -41,7 +41,7 @@ scalar JSON
 type Mutation {
   plugins: PluginManager!
   broadcastIdentityUdp: IdentityPayloadBody!
-  pair(id: String!): DeviceWithState!
+  pair(id: String!, pair: Boolean!): DeviceWithState!
 }
 
 type PairPayloadBody {

@@ -11,6 +11,10 @@
     "version": "0.0.0"
   },
   "tauri": {
+    "systemTray": {
+      "iconPath": "icon.png",
+      "title": "RustyConnect"
+    },
     "allowlist": {
       "all": false,
       "shell": {

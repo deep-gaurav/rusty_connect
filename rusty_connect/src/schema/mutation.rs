@@ -36,9 +36,9 @@ impl Mutation {
         Ok(identity)
     }
 
-    pub async fn pair(&self, id: String) -> anyhow::Result<DeviceWithState> {
+    pub async fn pair(&self, id: String, pair: bool) -> anyhow::Result<DeviceWithState> {
         let mut manager = self.device_manager.write().await;
-        let device = manager.pair(&id)?;
-        Ok(device.clone())
+        let device = manager.pair(&id, pair).await?;
+        Ok(device)
     }
 }

@@ -1,4 +1,5 @@
 use async_graphql::{Object, SimpleObject};
+use tracing::info;
 
 use super::Plugin;
 
@@ -24,7 +25,11 @@ impl Plugin for Ping {
     }
 
     fn parse_payload(&self, payload: &crate::payloads::Payload) -> Option<Self::PluginPayload> {
-        None
+        if payload.r#type == "kdeconnect.ping" {
+            Some(PingPayload { pinged: true })
+        } else {
+            None
+        }
     }
 }
 

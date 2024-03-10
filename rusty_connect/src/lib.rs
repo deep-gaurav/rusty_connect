@@ -10,7 +10,7 @@ use schema::subscription::Subscription;
 use schema::{mutation::Mutation, query::Query, GQSchema};
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
@@ -20,7 +20,7 @@ use tokio_rustls::rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, ServerN
 use tokio_rustls::rustls::ClientConfig;
 use tokio_rustls::TlsConnector;
 
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::cert::no_veifier::NoVerifier;
 use crate::payloads::{IdentityPayloadBody, Payload};
@@ -43,9 +43,17 @@ pub struct RustyConnect<C: AsRef<Path>, K: AsRef<Path>> {
 }
 
 impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
-    pub fn new(id: &str, name: &str, device_type: &str, cert_path: C, key_path: K) -> Self {
+    pub async fn new(
+        id: &str,
+        name: &str,
+        device_type: &str,
+        cert_path: C,
+        key_path: K,
+        device_config_path: &PathBuf,
+    ) -> anyhow::Result<Self> {
         let (tx, rx) = flume::bounded(0);
-        Self {
+        let device_manager = DeviceManager::load_or_create(device_config_path, tx, rx).await?;
+        Ok(Self {
             id: id.to_string(),
             name: name.to_string(),
             device_type: device_type.to_string(),
@@ -56,12 +64,8 @@ impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
                 name.to_string(),
                 device_type.to_string(),
             )),
-            device_manager: Arc::new(RwLock::new(DeviceManager {
-                devices: HashMap::new(),
-                sender: tx,
-                receiver: rx,
-            })),
-        }
+            device_manager: Arc::new(RwLock::new(device_manager)),
+        })
     }
 
     pub async fn run(&mut self, gql_port: u32) -> anyhow::Result<()> {
@@ -71,7 +75,6 @@ impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
         let tcp_fut = {
             // let certs = certs.clone();
             let device_manager = self.device_manager.clone();
-
             tokio::spawn(async move {
                 loop {
                     match tcp_listener.accept().await {
@@ -147,10 +150,10 @@ impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
                                                     let device = {
                                                         let mut device_manager =
                                                             device_manager.write().await;
-                                                        device_manager.connected_to(identity)
+                                                        device_manager.connected_to(identity).await
                                                     };
                                                     match device {
-                                                        Ok((tx, rx)) => {
+                                                        Ok((tx, rx, connection_id)) => {
                                                             if let Err(err) =
                                                                 Self::handle_tls_stream(
                                                                     tls_stream,
@@ -163,19 +166,25 @@ impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
                                                             {
                                                                 warn!("Error running tls stream {err:?}")
                                                             };
+
+                                                            {
+                                                                info!("Disconnecting device {device_id}");
+                                                                let mut device_manager =
+                                                                    device_manager.write().await;
+                                                                if let Err(err) = device_manager
+                                                                    .disconnect(
+                                                                        &device_id,
+                                                                        &connection_id,
+                                                                    )
+                                                                {
+                                                                    warn!("Error disconnecting {err:?}")
+                                                                }
+                                                                info!("Disconnected device {device_id}");
+                                                            }
                                                         }
 
                                                         Err(e) => {
                                                             warn!("Cannot connect to device {e:?}")
-                                                        }
-                                                    }
-                                                    {
-                                                        let mut device_manager =
-                                                            device_manager.write().await;
-                                                        if let Err(err) =
-                                                            device_manager.disconnect(&device_id)
-                                                        {
-                                                            warn!("Error disconnecting {err:?}")
                                                         }
                                                     }
                                                 }
@@ -241,7 +250,7 @@ impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
 
         let (mut read_stream, mut write_stream) = tokio::io::split(tls_stream);
 
-        let out_sender = tokio::spawn(async move {
+        let out_sender = async move {
             while let Ok(data) = rx.recv_async().await {
                 let data = serde_json::to_vec(&data);
                 match data {
@@ -252,9 +261,9 @@ impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
                     Err(er) => warn!("Cannot convert payload to json {er:?}"),
                 }
             }
-        });
+        };
 
-        let out_receiver = tokio::spawn(async move {
+        let out_receiver = async move {
             let mut buf = vec![0u8; 1024];
             let mut data_buffer = vec![];
             while let Ok(n) = read_stream.read(&mut buf).await {
@@ -277,7 +286,10 @@ impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
                     data_buffer = Vec::from(&data_buffer[position + 1..]);
                 }
             }
-        });
+            info!("TCP Disconnected")
+        };
+
+        tokio::pin!(out_sender, out_receiver);
         futures::future::select(out_sender, out_receiver).await;
         Ok(())
     }

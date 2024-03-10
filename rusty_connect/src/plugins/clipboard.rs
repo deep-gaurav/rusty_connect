@@ -1,4 +1,5 @@
 use async_graphql::{Object, SimpleObject};
+use serde::Deserialize;
 
 use super::Plugin;
 
@@ -30,11 +31,17 @@ impl Plugin for Clipboard {
     }
 
     fn parse_payload(&self, payload: &crate::payloads::Payload) -> Option<Self::PluginPayload> {
+        if payload.r#type == "kdeconnect.clipboard" {
+            let payload = serde_json::from_value::<Self::PluginPayload>(payload.body.clone());
+            if let Ok(payload) = payload {
+                return Some(payload);
+            }
+        }
         None
     }
 }
 
-#[derive(SimpleObject)]
+#[derive(SimpleObject, Deserialize)]
 pub struct ClipboardPayload {
     pub content: String,
 }

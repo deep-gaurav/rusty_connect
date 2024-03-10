@@ -5,9 +5,8 @@ use leptos_router::{Route, Router, Routes};
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
 use wasm_bindgen::prelude::*;
-use leptos::SignalGet;
 
-use crate::{device::Device, device_list::DeviceList, invoke::invoke};
+use crate::{device::Device, device_list::DeviceList, invoke::{invoke, refresh_devices}};
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -15,9 +14,7 @@ pub fn App() -> impl IntoView {
 
     create_effect(|_|  {
         wasm_bindgen_futures::spawn_local(async move {
-            unsafe {
-                invoke("refresh_devices", JsValue::NULL).await;
-            }
+            refresh_devices().await;
         })
     });
 
@@ -38,6 +35,10 @@ pub fn App() -> impl IntoView {
         </main>
     }
 }
+
+
+
+
 
 
 
