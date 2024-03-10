@@ -2,20 +2,22 @@ use std::collections::HashMap;
 
 use async_graphql::{Object, SimpleObject};
 use flume::{Receiver, Sender};
+use tracing::debug;
 
-use crate::payloads::{IdentityPayloadBody, PairPayloadBody, Payload};
+use crate::payloads::{IdentityPayloadBody, PairPayloadBody, Payload, RustyPayload};
 
 pub struct DeviceManager {
     pub devices: HashMap<String, DeviceWithState>,
-    pub sender: flume::Sender<(String, Payload)>,
-    pub receiver: flume::Receiver<(String, Payload)>,
+    pub sender: flume::Sender<(String, RustyPayload)>,
+    pub receiver: flume::Receiver<(String, RustyPayload)>,
 }
 
 impl DeviceManager {
     pub fn connected_to(
         &mut self,
         identity: IdentityPayloadBody,
-    ) -> anyhow::Result<(Sender<(String, Payload)>, Receiver<Payload>)> {
+    ) -> anyhow::Result<(Sender<(String, RustyPayload)>, Receiver<Payload>)> {
+        let device_id = identity.device_id.clone();
         let DeviceWithState { device: _, state } = self
             .devices
             .entry(identity.device_id.clone())
@@ -31,10 +33,28 @@ impl DeviceManager {
             DeviceState::InActive => {
                 let (tx, rx) = flume::bounded(0);
                 *state = DeviceState::Active(tx);
+                if let Err(err) = self.sender.try_send((device_id, RustyPayload::Connected)) {
+                    debug!("Error sending connected message {err:?}");
+                }
                 Ok((self.sender.clone(), rx))
             }
             DeviceState::Active(_) => Err(anyhow::anyhow!("Device already connected")),
         }
+    }
+
+    pub fn disconnect(&mut self, device_id: &str) -> anyhow::Result<()> {
+        let entry = self
+            .devices
+            .get_mut(device_id)
+            .ok_or(anyhow::anyhow!("No device with given id"))?;
+        entry.state = DeviceState::InActive;
+        if let Err(err) = self
+            .sender
+            .try_send((device_id.to_string(), RustyPayload::Disconnect))
+        {
+            debug!("Error sending disconnected message {err:?}");
+        }
+        Ok(())
     }
 
     pub fn pair(&mut self, id: &str) -> anyhow::Result<&DeviceWithState> {

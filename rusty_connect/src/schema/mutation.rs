@@ -28,7 +28,6 @@ impl Mutation {
         let value = serde_json::to_value(identity.clone())?;
         let payload_string =
             serde_json::to_string(&Payload::generate_new("kdeconnect.identity", value))?;
-        dbg!(&payload_string);
         let mut payload_bytes = payload_string.as_bytes().to_vec();
         payload_bytes.append(&mut b"\n".to_vec());
         let advertise_addr: SocketAddr = "255.255.255.255:1716".parse().expect("Invalid address");

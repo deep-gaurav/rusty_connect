@@ -1,0 +1,24 @@
+[package]
+name = "api"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+log = "0.4.21"
+tauri = { version = "1.6.1", optional = true }
+tauri-interop = { git = "https://github.com/deep-gaurav/tauri-interop.git", features = [
+    "listen",
+] }
+graphql_client = "0.13.0"
+serde_json = "1.0.114"
+serde = { version = "1.0.197", features = ["derive"] }
+leptos = { version = "0.6.9", features = ["csr"], optional = true }
+
+[features]
+default = []
+host = ["dep:tauri"]
+wasm = ["tauri-interop/leptos"]
+leptos = ["dep:leptos", "tauri-interop/leptos"]
+broken = []

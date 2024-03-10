@@ -1,5 +1,5 @@
 use async_graphql::Union;
-use async_graphql::{Object, ObjectType};
+use async_graphql::{Object, ObjectType, SimpleObject};
 use paste::paste;
 
 use crate::payloads::{IdentityPayloadBody, PairPayloadBody, Payload};
@@ -60,6 +60,8 @@ macro_rules! register_plugins {
 
             #[derive(Union)]
             pub enum ReceivedPayload{
+                Connected(Connected),
+                Disconnected(Disconnected),
                 Identity(IdentityPayloadBody),
                 Pair(PairPayloadBody),
                 $(
@@ -68,6 +70,15 @@ macro_rules! register_plugins {
                 Unknown(Payload)
             }
 
+            #[derive(SimpleObject)]
+            pub struct Connected {
+                pub id: String
+            }
+
+            #[derive(SimpleObject)]
+            pub struct Disconnected {
+                pub id: String
+            }
 
             impl PluginManager {
 

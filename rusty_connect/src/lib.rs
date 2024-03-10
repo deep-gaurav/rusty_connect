@@ -4,6 +4,7 @@ use axum::response::{Html, IntoResponse};
 use axum::Extension;
 use cert::certgen::generate_cert;
 use devices::DeviceManager;
+use payloads::RustyPayload;
 use plugins::PluginManager;
 use schema::subscription::Subscription;
 use schema::{mutation::Mutation, query::Query, GQSchema};
@@ -152,8 +153,11 @@ impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
                                                         Ok((tx, rx)) => {
                                                             if let Err(err) =
                                                                 Self::handle_tls_stream(
-                                                                    tls_stream, address, device_id,
-                                                                    tx, rx,
+                                                                    tls_stream,
+                                                                    address,
+                                                                    device_id.clone(),
+                                                                    tx,
+                                                                    rx,
                                                                 )
                                                                 .await
                                                             {
@@ -163,6 +167,15 @@ impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
 
                                                         Err(e) => {
                                                             warn!("Cannot connect to device {e:?}")
+                                                        }
+                                                    }
+                                                    {
+                                                        let mut device_manager =
+                                                            device_manager.write().await;
+                                                        if let Err(err) =
+                                                            device_manager.disconnect(&device_id)
+                                                        {
+                                                            warn!("Error disconnecting {err:?}")
                                                         }
                                                     }
                                                 }
@@ -186,7 +199,7 @@ impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
         Ok(())
     }
 
-    pub async fn run_gql(&self, port: u32) -> anyhow::Result<()> {
+    async fn run_gql(&self, port: u32) -> anyhow::Result<()> {
         let schema = GQSchema::build(
             Query {
                 device_manager: self.device_manager.clone(),
@@ -221,7 +234,7 @@ impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
         tls_stream: TlsStream<TcpStream>,
         _address: SocketAddr,
         device_id: String,
-        tx: flume::Sender<(String, Payload)>,
+        tx: flume::Sender<(String, RustyPayload)>,
         rx: flume::Receiver<Payload>,
     ) -> anyhow::Result<()> {
         debug!("Listening TLS for id {device_id:?}");
@@ -253,7 +266,10 @@ impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
                     if let Ok(payload) = serde_json::from_slice::<Payload>(&data_buffer[..position])
                     {
                         debug!("Received payload {payload:?}");
-                        match tx.try_send((device_id.to_string(), payload)) {
+                        match tx.try_send((
+                            device_id.to_string(),
+                            RustyPayload::KDEConnectPayload(payload),
+                        )) {
                             Err(err) => warn!("Nothing to handle payload {err:?}"),
                             Ok(_) => debug!("Sent payload to channel"),
                         }

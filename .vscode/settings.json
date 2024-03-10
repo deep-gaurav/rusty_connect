@@ -1,0 +1,5 @@
+{
+    "rust-analyzer.linkedProjects": [
+        "./rusty-connect-tauri/src-tauri/Cargo.toml"
+    ]
+}

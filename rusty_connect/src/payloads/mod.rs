@@ -4,6 +4,12 @@ use serde_json::Value;
 
 use crate::utils::get_timestamp;
 
+pub enum RustyPayload {
+    Connected,
+    Disconnect,
+    KDEConnectPayload(Payload),
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Payload {
