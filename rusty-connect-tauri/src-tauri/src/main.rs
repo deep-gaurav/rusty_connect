@@ -8,8 +8,8 @@ use gql_subscription::listen_to_server;
 use once_cell::sync::{Lazy, OnceCell};
 use server::run_server;
 use tauri::{
-    ActivationPolicy, App, AppHandle, CustomMenuItem, Manager, RunEvent, Runtime, SystemTray,
-    SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem, Url,
+    App, AppHandle, CustomMenuItem, Manager, RunEvent, SystemTray, SystemTrayEvent, SystemTrayMenu,
+    SystemTrayMenuItem, Url,
 };
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
