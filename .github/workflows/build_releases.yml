@@ -39,11 +39,14 @@ jobs:
         with:
           # Optional version of trunk to install(eg. 'v0.16.0', 'latest')
           version: 'latest'
+      - name: Update Cargo.toml
+        run: |
+          sed -i 's/# \[workspace\]/# \[workspace\]\nmembers = \["api", "src-tauri"\]/' Cargo.toml
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: './src-tauri -> target'
+          workspaces: './rusty-connect-tauri -> target'
           
       - name: Build the app
         uses: tauri-apps/tauri-action@v0
