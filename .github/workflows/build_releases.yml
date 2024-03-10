@@ -15,12 +15,12 @@ jobs:
         platform: [macos-latest, ubuntu-20.04, windows-latest]
     runs-on: ${{ matrix.platform }}
 
+    defaults:
+      run:
+          working-directory: ./rusty-connect-tauri
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        
-      - name: Change to subdirectory
-        run: cd rusty-connect-tauri
 
       - name: Install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-20.04'
@@ -31,6 +31,12 @@ jobs:
 
       - name: Rust setup
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install trunk
+        uses: jetli/trunk-action@v0.4.0
+        with:
+          # Optional version of trunk to install(eg. 'v0.16.0', 'latest')
+          version: 'latest'
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
