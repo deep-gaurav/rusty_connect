@@ -39,9 +39,8 @@ jobs:
         with:
           # Optional version of trunk to install(eg. 'v0.16.0', 'latest')
           version: 'latest'
-      - name: Update Cargo.toml
-        run: |
-          sed -i 's/# \[workspace\]/# \[workspace\]\nmembers = \["api", "src-tauri"\]/' Cargo.toml
+      - name: Read and Replace Cargo.toml
+        run: python3 ../.github/update_cargo_toml.py
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
