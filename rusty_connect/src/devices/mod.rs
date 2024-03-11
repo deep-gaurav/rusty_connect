@@ -5,12 +5,12 @@ use flume::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use crate::payloads::{IdentityPayloadBody, PairPayloadBody, Payload, RustyPayload};
+use crate::payloads::{IdentityPayloadBody, PairPayloadBody, Payload, PayloadType, RustyPayload};
 
 pub struct DeviceManager {
     pub devices: HashMap<String, DeviceWithState>,
-    pub sender: flume::Sender<(String, RustyPayload)>,
-    pub receiver: flume::Receiver<(String, RustyPayload)>,
+    pub sender: flume::Sender<PayloadType>,
+    pub receiver: flume::Receiver<PayloadType>,
     config_path: PathBuf,
 }
 
@@ -22,8 +22,8 @@ struct DeviceConfig {
 impl DeviceManager {
     pub async fn load_or_create(
         device_config: &PathBuf,
-        sender: flume::Sender<(String, RustyPayload)>,
-        receiver: flume::Receiver<(String, RustyPayload)>,
+        sender: flume::Sender<PayloadType>,
+        receiver: flume::Receiver<PayloadType>,
     ) -> anyhow::Result<Self> {
         let config = 'config: {
             if let Ok(data) = tokio::fs::read(device_config).await {
@@ -54,11 +54,7 @@ impl DeviceManager {
     pub async fn connected_to(
         &mut self,
         identity: IdentityPayloadBody,
-    ) -> anyhow::Result<(
-        Sender<(String, RustyPayload)>,
-        Receiver<Payload>,
-        uuid::Uuid,
-    )> {
+    ) -> anyhow::Result<(Sender<PayloadType>, Receiver<Payload>, uuid::Uuid)> {
         let device_id = identity.device_id.clone();
         let DeviceWithState { device: _, state } = self
             .devices
@@ -75,7 +71,10 @@ impl DeviceManager {
         let (tx, rx) = flume::bounded(0);
         let id = uuid::Uuid::new_v4();
         *state = DeviceState::Active(id, tx);
-        if let Err(err) = self.sender.try_send((device_id, RustyPayload::Connected)) {
+        if let Err(err) = self.sender.try_send(PayloadType::ConnectionPayload(
+            device_id,
+            RustyPayload::Connected,
+        )) {
             debug!("Error sending connected message {err:?}");
         }
         self.save().await?;
@@ -108,10 +107,10 @@ impl DeviceManager {
             DeviceState::Active(id, _) => {
                 if id == connection_id {
                     entry.state = DeviceState::InActive;
-                    if let Err(err) = self
-                        .sender
-                        .try_send((device_id.to_string(), RustyPayload::Disconnect))
-                    {
+                    if let Err(err) = self.sender.try_send(PayloadType::ConnectionPayload(
+                        device_id.to_string(),
+                        RustyPayload::Disconnect,
+                    )) {
                         debug!("Error sending disconnected message {err:?}");
                     }
                     Ok(())

@@ -8,6 +8,7 @@ use tracing::debug;
 
 use crate::{
     devices::DeviceManager,
+    payloads::PayloadType,
     plugins::{Connected, Disconnected, PluginManager, ReceivedPayload},
 };
 
@@ -30,27 +31,34 @@ impl Subscription {
 
         let stream = stream! {
             debug!("Listening for new payload from channel");
-            while let Ok((device_id,payload)) = receiver.recv_async().await {
-                match payload {
-                    crate::payloads::RustyPayload::Connected => yield ReceivedMessage {
-                        device_id:device_id.clone(),
-                        payload:ReceivedPayload::Connected(
-                            Connected{
-                                id:device_id
-                            }
-                        )
-                    },
-                    crate::payloads::RustyPayload::Disconnect => yield ReceivedMessage {
-                        device_id:device_id.clone(),
-                        payload:ReceivedPayload::Disconnected(
-                            Disconnected{
-                                id:device_id
-                            }
-                        )
-                    },
-                    crate::payloads::RustyPayload::KDEConnectPayload(payload) => if let Ok(payload) = plugin_manager.parse_payload(payload){
-                        yield ReceivedMessage { device_id, payload }
-                    },
+            while let Ok(payload_type) = receiver.recv_async().await {
+                match payload_type {
+                    PayloadType::Broadcast(payload) => {
+                        if let Ok(payload) = plugin_manager.parse_payload(payload){
+                            yield ReceivedMessage { device_id:None, payload }
+                        }
+                    }
+                    PayloadType::ConnectionPayload(device_id,payload) => match payload {
+                        crate::payloads::RustyPayload::Connected => yield ReceivedMessage {
+                            device_id:Some(device_id.clone()),
+                            payload:ReceivedPayload::Connected(
+                                Connected{
+                                    id:device_id
+                                }
+                            )
+                        },
+                        crate::payloads::RustyPayload::Disconnect => yield ReceivedMessage {
+                            device_id:Some(device_id.clone()),
+                            payload:ReceivedPayload::Disconnected(
+                                Disconnected{
+                                    id:device_id
+                                }
+                            )
+                        },
+                        crate::payloads::RustyPayload::KDEConnectPayload(payload) => if let Ok(payload) = plugin_manager.parse_payload(payload){
+                            yield ReceivedMessage { device_id:Some(device_id), payload }
+                        },
+                    }
                 }
             }
             debug!("Stopped listening for payload")
@@ -61,6 +69,6 @@ impl Subscription {
 
 #[derive(SimpleObject)]
 pub struct ReceivedMessage {
-    pub device_id: String,
+    pub device_id: Option<String>,
     pub payload: ReceivedPayload,
 }

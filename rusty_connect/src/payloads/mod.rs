@@ -10,6 +10,11 @@ pub enum RustyPayload {
     KDEConnectPayload(Payload),
 }
 
+pub enum PayloadType {
+    Broadcast(Payload),
+    ConnectionPayload(String, RustyPayload),
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Payload {

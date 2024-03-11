@@ -1,4 +1,6 @@
-use api::{connection_subscription, APIEmit, AllDevices, ConnectionSubscription, API};
+use api::{
+    connection_subscription, APIEmit, AllDevices, BroadcastUdp, ConnectionSubscription, API,
+};
 use clipboard::{ClipboardContext, ClipboardProvider};
 use flume::Sender;
 use futures::StreamExt;
@@ -10,18 +12,48 @@ use graphql_ws_client::Client;
 use tauri::{AppHandle, CustomMenuItem, SystemTrayMenu, SystemTrayMenuItem, SystemTraySubmenu};
 use tracing::{debug, info, warn};
 
-pub async fn listen_to_server(port: u32, app: &AppHandle) -> anyhow::Result<()> {
+pub async fn listen_to_server(
+    port: u32,
+    app: &AppHandle,
+    started_sender: tokio::sync::oneshot::Sender<()>,
+) -> anyhow::Result<()> {
     let mut request = format!("ws://localhost:{port}/ws").into_client_request()?;
     request.headers_mut().insert(
         "Sec-WebSocket-Protocol",
         HeaderValue::from_str("graphql-transport-ws")?,
     );
-    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    let request_client = reqwest::Client::new();
+
+    let mut max_tries = 3;
+    let wait = std::time::Duration::from_secs(1);
+    let is_server_running = loop {
+        let response = graphql_client::reqwest::post_graphql::<BroadcastUdp, _>(
+            &request_client,
+            format!("http://localhost:{port}"),
+            api::broadcast_udp::Variables,
+        )
+        .await;
+        if response.is_ok() {
+            break true;
+        } else if max_tries <= 0 {
+            break false;
+        } else {
+            tokio::time::sleep(wait).await;
+            max_tries -= 1;
+        }
+    };
+
+    if is_server_running {
+        started_sender
+            .send(())
+            .map_err(|_| anyhow::anyhow!("Cannot send started"))?;
+    } else {
+        return Err(anyhow::anyhow!("Cannot start server"));
+    }
+
     info!("Running GQL Listener");
     let (connection, _) = async_tungstenite::tokio::connect_async(request).await?;
     info!("GQL Listener Started");
-
-    let request_client = reqwest::Client::new();
 
     let mut subscription = Client::build(connection)
         .subscribe(StreamingOperation::<ConnectionSubscription>::new(
@@ -40,13 +72,19 @@ pub async fn listen_to_server(port: u32, app: &AppHandle) -> anyhow::Result<()> 
                         info!("Disconnected device, updating list {:?}", _data);
                         refresh_devices(&request_client, app.clone(), port);
                     },
-                    connection_subscription::ConnectionSubscriptionPayloadsPayload::IdentityPayloadBody(_) => {},
+                    connection_subscription::ConnectionSubscriptionPayloadsPayload::IdentityPayloadBody(_) => {
+                        if data.payloads.device_id.is_none() {
+                            refresh_devices(&request_client, app.clone(), port);
+                        }
+                    },
                     connection_subscription::ConnectionSubscriptionPayloadsPayload::PairPayloadBody(_) => {
-                        if let Err(err) =  (API{
-                            event:api::KDEEvents::PairRequest(data.payloads.device_id),
-                            ..Default::default()
-                        }).emit(app,APIEmit::Event) {
-                            debug!("Cant send pair request event {err:?}")
+                        if let Some(device_id) = data.payloads.device_id {
+                            if let Err(err) =  (API{
+                                event:api::KDEEvents::PairRequest(device_id),
+                                ..Default::default()
+                            }).emit(app,APIEmit::Event) {
+                                debug!("Cant send pair request event {err:?}")
+                            }
                         }
                     },
                     connection_subscription::ConnectionSubscriptionPayloadsPayload::PingPayload(_) => {},

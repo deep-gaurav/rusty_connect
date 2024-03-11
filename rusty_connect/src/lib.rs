@@ -4,12 +4,12 @@ use axum::response::{Html, IntoResponse};
 use axum::Extension;
 use cert::certgen::generate_cert;
 use devices::DeviceManager;
-use payloads::RustyPayload;
+use payloads::{PayloadType, RustyPayload};
 use plugins::PluginManager;
 use schema::subscription::Subscription;
 use schema::{mutation::Mutation, query::Query, GQSchema};
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -75,7 +75,7 @@ impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
         let tcp_fut = {
             // let certs = certs.clone();
             let device_manager = self.device_manager.clone();
-            tokio::spawn(async move {
+            async move {
                 loop {
                     match tcp_listener.accept().await {
                         Ok((mut socket, address)) => {
@@ -200,11 +200,18 @@ impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
                         Err(err) => error!("Cannot establish tcp connection {err:?}"),
                     };
                 }
-            })
+            }
         };
         let gql_fut = self.run_gql(gql_port);
-        tokio::pin!(gql_fut);
-        futures::future::select(tcp_fut, gql_fut).await;
+        let tx = { self.device_manager.read().await.sender.clone() };
+        let broadcast_listener = self.listen_to_broadcast(1716, tx);
+
+        tokio::pin!(gql_fut, tcp_fut, broadcast_listener);
+        futures::future::select(
+            tcp_fut,
+            futures::future::select(gql_fut, broadcast_listener),
+        )
+        .await;
         Ok(())
     }
 
@@ -239,11 +246,38 @@ impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
         Ok(())
     }
 
+    async fn listen_to_broadcast(
+        &self,
+        kde_port: u16,
+        tx: flume::Sender<PayloadType>,
+    ) -> anyhow::Result<()> {
+        let socket = UdpSocket::bind(format!("0.0.0.0:{kde_port}")).await?;
+
+        let mut buf = vec![0u8; 4096];
+        let mut data_buffer = vec![];
+        info!("Waiting from broadcast");
+        while let Ok(n) = socket.recv_buf(&mut buf).await {
+            let data = &buf[..n];
+            data_buffer.extend_from_slice(data);
+            if let Some(position) = data_buffer.iter().position(|el| *el == b'\n') {
+                if let Ok(payload) = serde_json::from_slice::<Payload>(&data_buffer[..position]) {
+                    info!("Received broadcast payload");
+                    match tx.try_send(PayloadType::Broadcast(payload)) {
+                        Err(err) => warn!("Nothing to handle payload {err:?}"),
+                        Ok(_) => debug!("Sent payload to channel"),
+                    }
+                }
+                data_buffer = Vec::from(&data_buffer[position + 1..]);
+            }
+        }
+        Ok(())
+    }
+
     pub async fn handle_tls_stream(
         tls_stream: TlsStream<TcpStream>,
         _address: SocketAddr,
         device_id: String,
-        tx: flume::Sender<(String, RustyPayload)>,
+        tx: flume::Sender<PayloadType>,
         rx: flume::Receiver<Payload>,
     ) -> anyhow::Result<()> {
         debug!("Listening TLS for id {device_id:?}");
@@ -270,12 +304,9 @@ impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
                 let data = &buf[..n];
                 data_buffer.extend_from_slice(data);
                 if let Some(position) = data_buffer.iter().position(|el| *el == b'\n') {
-                    dbg!(position);
-                    dbg!(data_buffer.len());
                     if let Ok(payload) = serde_json::from_slice::<Payload>(&data_buffer[..position])
                     {
-                        debug!("Received payload {payload:?}");
-                        match tx.try_send((
+                        match tx.try_send(PayloadType::ConnectionPayload(
                             device_id.to_string(),
                             RustyPayload::KDEConnectPayload(payload),
                         )) {
