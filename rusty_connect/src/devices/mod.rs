@@ -5,7 +5,10 @@ use flume::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use crate::payloads::{IdentityPayloadBody, PairPayloadBody, Payload, PayloadType, RustyPayload};
+use crate::{
+    payloads::{IdentityPayloadBody, PairPayloadBody, Payload, PayloadType, RustyPayload},
+    plugins::PluginConfigs,
+};
 
 pub struct DeviceManager {
     pub devices: HashMap<String, DeviceWithState>,
@@ -64,6 +67,7 @@ impl DeviceManager {
                     paired: false,
                     id: identity.device_id.clone(),
                     identity,
+                    plugin_configs: PluginConfigs::default(),
                 },
                 state: DeviceState::InActive,
             });
@@ -149,7 +153,7 @@ pub struct DeviceWithState {
 
 #[Object]
 impl DeviceWithState {
-    pub async fn device(&self) -> &Device {
+    pub async fn device<'a>(&self) -> &Device {
         &self.device
     }
 
@@ -163,6 +167,7 @@ pub struct Device {
     pub id: String,
     pub identity: IdentityPayloadBody,
     pub paired: bool,
+    pub plugin_configs: PluginConfigs,
 }
 
 #[derive(Clone)]

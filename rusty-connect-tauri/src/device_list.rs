@@ -53,7 +53,10 @@ pub fn DeviceList(devices: ReadSignal<Vec<DeviceWithStateFields>>) -> impl IntoV
     view! {
         <div>
 
-            <dialog _ref=pairing_dialog_ref class="backdrop:bg-slate-500/25 rounded-md shadow-md">
+            <dialog
+                _ref=pairing_dialog_ref
+                class="backdrop:bg-slate-500/25 rounded-md shadow-md p-4"
+            >
                 <h2 class="font-bold text-xl">Pairing Requested</h2>
 
                 {move || {

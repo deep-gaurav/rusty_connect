@@ -1,5 +1,5 @@
 use async_graphql::{Object, SimpleObject};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use super::Plugin;
@@ -16,6 +16,7 @@ impl Ping {
 
 impl Plugin for Ping {
     type PluginPayload = PingPayload;
+    type PluginConfig = PingConfig;
 
     fn incoming_capabilities(&self) -> Vec<String> {
         vec!["kdeconnect.ping".to_string()]
@@ -32,9 +33,22 @@ impl Plugin for Ping {
             None
         }
     }
+
+    fn is_enabled(&self, config: &Option<Self::PluginConfig>) -> bool {
+        if let Some(config) = config {
+            config.enabled
+        } else {
+            true
+        }
+    }
 }
 
 #[derive(SimpleObject, Serialize)]
 pub struct PingPayload {
     pinged: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone, SimpleObject)]
+pub struct PingConfig {
+    enabled: bool,
 }

@@ -2,6 +2,10 @@ type Clipboard {
   sendClipboard(deviceId: String, content: String!): String!
 }
 
+type ClipboardConfig {
+  enabled: Boolean!
+}
+
 type ClipboardPayload {
   content: String!
 }
@@ -14,6 +18,7 @@ type Device {
   id: String!
   identity: IdentityPayloadBody!
   paired: Boolean!
+  pluginConfigs: PluginConfigs!
 }
 
 type DeviceWithState {
@@ -58,8 +63,17 @@ type Ping {
   sendPing: String!
 }
 
+type PingConfig {
+  enabled: Boolean!
+}
+
 type PingPayload {
   pinged: Boolean!
+}
+
+type PluginConfigs {
+  ping: PingConfig
+  clipboard: ClipboardConfig
 }
 
 type PluginManager {

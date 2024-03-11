@@ -1,14 +1,15 @@
+use std::any::TypeId;
 use std::sync::Arc;
 
 use anyhow::Ok;
-use async_graphql::{Context, Union};
+use async_graphql::{Context, OutputType, Union};
 use async_graphql::{Object, ObjectType, SimpleObject};
 use paste::paste;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::warn;
 
-use crate::devices::{DeviceManager, DeviceState};
+use crate::devices::{Device, DeviceManager, DeviceState};
 use crate::payloads::{IdentityPayloadBody, PairPayloadBody, Payload};
 
 use self::{clipboard::Clipboard, ping::Ping};
@@ -18,11 +19,40 @@ pub mod ping;
 
 pub trait Plugin: async_graphql::ObjectType + Default {
     type PluginPayload: ObjectType + Serialize;
+    type PluginConfig: OutputType + Clone + Serialize + Deserialize<'static> + Default;
 
     fn incoming_capabilities(&self) -> Vec<String>;
     fn outgoing_capabilities(&self) -> Vec<String>;
 
+    fn is_enabled(&self, config: &Option<Self::PluginConfig>) -> bool;
+
     fn parse_payload(&self, payload: &Payload) -> Option<Self::PluginPayload>;
+}
+
+trait PluginExt: Plugin {
+    fn get_config_from_plugin_configs(configs: &PluginConfigs) -> &Option<Self::PluginConfig>;
+
+    fn get_config<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        device_id: &str,
+    ) -> impl std::future::Future<Output = anyhow::Result<Option<Self::PluginConfig>>> + Send {
+        async move {
+            let device_manager = {
+                context
+                    .data::<Arc<RwLock<DeviceManager>>>()
+                    .map_err(|e| anyhow::anyhow!("{e:?}"))?
+                    .read()
+                    .await
+                    .devices
+                    .clone()
+            };
+            let device = device_manager
+                .get(device_id)
+                .ok_or(anyhow::anyhow!("Device not found with given id"))?;
+            Ok(Self::get_config_from_plugin_configs(&device.device.plugin_configs).clone())
+        }
+    }
 
     fn send_payload<'ctx>(
         &self,
@@ -50,6 +80,11 @@ pub trait Plugin: async_graphql::ObjectType + Default {
                 if !device.device.paired {
                     return Err(anyhow::anyhow!("Device not paired"));
                 }
+                if !self.is_enabled(Self::get_config_from_plugin_configs(
+                    &device.device.plugin_configs,
+                )) {
+                    return Err(anyhow::anyhow!("Plugin disabled for config"));
+                }
                 if let DeviceState::Active(_, sender) = &device.state {
                     sender.send_async(payload).await?;
                 } else {
@@ -57,7 +92,11 @@ pub trait Plugin: async_graphql::ObjectType + Default {
                 }
             } else {
                 for (_, device) in device_manager.iter() {
-                    if device.device.paired {
+                    if device.device.paired
+                        && self.is_enabled(Self::get_config_from_plugin_configs(
+                            &device.device.plugin_configs,
+                        ))
+                    {
                         if let DeviceState::Active(_, sender) = &device.state {
                             if let Err(err) = sender.send_async(payload.clone()).await {
                                 warn!("Failed to send {err:?}")
@@ -81,6 +120,13 @@ macro_rules! register_plugins {
                 pub device_type: String,
                 $(
                     pub [<$type:lower>]: $type,
+                )*
+            }
+
+            #[derive(Debug,Serialize,Deserialize,Default,Clone, SimpleObject)]
+            pub struct PluginConfigs{
+                $(
+                    pub [<$type:lower>]: Option<<$type as Plugin>::PluginConfig>,
                 )*
             }
 
@@ -146,26 +192,40 @@ macro_rules! register_plugins {
                     }
                 }
 
-                pub fn parse_payload(&self, payload: Payload) -> anyhow::Result<ReceivedPayload> {
+                pub fn parse_payload(&self, payload: Payload, device: Option<&Device>) -> anyhow::Result<ReceivedPayload> {
                     if payload.r#type == "kdeconnect.identity" {
                         let identity = serde_json::from_value::<IdentityPayloadBody>(payload.body)?;
-                        Ok(ReceivedPayload::Identity(identity))
+                       return Ok(ReceivedPayload::Identity(identity))
                     }
                     else if payload.r#type == "kdeconnect.pair" {
                         let pair = serde_json::from_value::<PairPayloadBody>(payload.body)?;
-                        Ok(ReceivedPayload::Pair(pair))
+                      return  Ok(ReceivedPayload::Pair(pair))
                     }
-                    $(
-                        else if let Some([<$type:lower _payload>]) = self.[<$type:lower>].parse_payload(&payload) {
-                            Ok(ReceivedPayload::$type([<$type:lower _payload>]))
-                        }
-                    )*
-                    else {
-                        Ok(ReceivedPayload::Unknown(payload))
+                    if let Some(device) = device {
+                        $(
+                            if self.[<$type:lower>].is_enabled($type::get_config_from_plugin_configs(&device.plugin_configs)) {
+                                if let Some([<$type:lower _payload>]) = self.[<$type:lower>].parse_payload(&payload) {
+                                    return Ok(ReceivedPayload::$type([<$type:lower _payload>]))
+                                }
+                            }
+                        )*
                     }
+                    Ok(ReceivedPayload::Unknown(payload))
+
                 }
             }
+
+            $(
+                impl PluginExt for $type {
+                    fn get_config_from_plugin_configs(configs: &PluginConfigs) -> &Option<Self::PluginConfig> {
+                        &configs.[<$type:lower>]
+                    }
+                }
+            )*
+
         }
+
+
     };
 }
 

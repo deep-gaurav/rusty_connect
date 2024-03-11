@@ -1,7 +1,7 @@
 use async_graphql::{Context, Object, SimpleObject};
 use serde::{Deserialize, Serialize};
 
-use super::Plugin;
+use super::{Plugin, PluginExt};
 
 #[derive(Default)]
 pub struct Clipboard;
@@ -28,6 +28,7 @@ impl Clipboard {
 
 impl Plugin for Clipboard {
     type PluginPayload = ClipboardPayload;
+    type PluginConfig = ClipboardConfig;
 
     fn incoming_capabilities(&self) -> Vec<String> {
         vec![
@@ -52,9 +53,22 @@ impl Plugin for Clipboard {
         }
         None
     }
+
+    fn is_enabled(&self, config: &Option<Self::PluginConfig>) -> bool {
+        if let Some(config) = config {
+            config.enabled
+        } else {
+            true
+        }
+    }
 }
 
 #[derive(SimpleObject, Deserialize, Serialize)]
 pub struct ClipboardPayload {
     pub content: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone, SimpleObject)]
+pub struct ClipboardConfig {
+    enabled: bool,
 }
