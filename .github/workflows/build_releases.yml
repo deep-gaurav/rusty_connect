@@ -38,7 +38,7 @@ jobs:
         uses: jetli/trunk-action@v0.4.0
         with:
           # Optional version of trunk to install(eg. 'v0.16.0', 'latest')
-          version: 'latest'
+          version: 'v0.19.0'
       - name: Read and Replace Cargo.toml
         run: python3 ../.github/update_cargo_toml.py
 
