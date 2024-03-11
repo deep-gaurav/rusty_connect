@@ -7,11 +7,13 @@ use api::{BroadcastUdp, Pair};
 use gql_subscription::listen_to_server;
 use once_cell::sync::{Lazy, OnceCell};
 use server::run_server;
+use state::Devices;
 use system_tray::generate_system_tray_menu;
 use tauri::{
     App, AppHandle, CustomMenuItem, Manager, RunEvent, SystemTray, SystemTrayEvent, SystemTrayMenu,
     SystemTrayMenuItem, Url,
 };
+use tokio::sync::RwLock;
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -20,6 +22,7 @@ use plugins::clipboard::send_clipboard;
 pub mod gql_subscription;
 pub mod plugins;
 pub mod server;
+pub mod state;
 pub mod system_tray;
 
 static REQWEST_CLIENT: Lazy<reqwest::Client> = Lazy::new(reqwest::Client::new);
@@ -102,6 +105,9 @@ fn main() {
         .init();
 
     tauri::Builder::default()
+        .manage(Devices {
+            devices: RwLock::new(Vec::new()),
+        })
         .invoke_handler(tauri::generate_handler![
             refresh_devices,
             pair,

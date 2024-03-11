@@ -34,14 +34,14 @@ impl Plugin for Clipboard {
     fn incoming_capabilities(&self) -> Vec<String> {
         vec![
             "kdeconnect.clipboard".to_string(),
-            "kdeconnect.clipboard.connect".to_string(), // TODO: figure out what this does? autosync?
+            // "kdeconnect.clipboard.connect".to_string(), // TODO: figure out what this does? autosync?
         ]
     }
 
     fn outgoing_capabilities(&self) -> Vec<String> {
         vec![
             "kdeconnect.clipboard".to_string(),
-            "kdeconnect.clipboard.connect".to_string(), // TODO: figure out what this does? autosync?
+            // "kdeconnect.clipboard.connect".to_string(), // TODO: figure out what this does? autosync?
         ]
     }
 
@@ -50,9 +50,7 @@ impl Plugin for Clipboard {
         payload: &crate::payloads::Payload,
         state: &mut Self::PluginState,
     ) -> Option<Self::PluginPayload> {
-        if payload.r#type == "kdeconnect.clipboard"
-            || payload.r#type == "kdeconnect.clipboard.connect"
-        {
+        if payload.r#type == "kdeconnect.clipboard" {
             let payload = serde_json::from_value::<Self::PluginPayload>(payload.body.clone());
             if let Ok(payload) = payload {
                 return Some(payload);

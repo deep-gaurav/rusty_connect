@@ -9,10 +9,13 @@ use graphql_client::GraphQLQuery;
 use async_tungstenite::tungstenite::{client::IntoClientRequest, http::HeaderValue};
 use graphql_ws_client::graphql::StreamingOperation;
 use graphql_ws_client::Client;
-use tauri::{AppHandle, CustomMenuItem, SystemTrayMenu, SystemTrayMenuItem, SystemTraySubmenu};
+use tauri::{
+    api::notification::Notification, AppHandle, CustomMenuItem, Manager, SystemTrayMenu,
+    SystemTrayMenuItem, SystemTraySubmenu,
+};
 use tracing::{debug, info, warn};
 
-use crate::system_tray::generate_system_tray_menu;
+use crate::{state::Devices, system_tray::generate_system_tray_menu};
 
 pub async fn listen_to_server(
     port: u32,
@@ -89,7 +92,18 @@ pub async fn listen_to_server(
                             }
                         }
                     },
-                    connection_subscription::ConnectionSubscriptionPayloadsPayload::PingPayload(_) => {},
+                    connection_subscription::ConnectionSubscriptionPayloadsPayload::PingPayload(payload) => {
+                        if let Some(device_id) = data.payloads.device_id{
+                            let device = {
+                                app.state::<Devices>().devices.read().await.iter().find(|d|d.device.id == device_id).cloned()
+                            };
+                            if let Some(device) = device {
+                                if let Err(err)=  Notification::new(&app.config().tauri.bundle.identifier).title(format!("Ping Received from {}", device.device.identity.device_name)).body(format!("Pinged message {payload:?}")).show(){
+                                    warn!("Notification send error {err:?}")
+                                }
+                            }
+                        }
+                    },
                     connection_subscription::ConnectionSubscriptionPayloadsPayload::ClipboardPayload(data) => {
                         info!("Copying {data:?} to clipboard");
                         let mut ctx: ClipboardContext = ClipboardProvider::new().unwrap();
@@ -123,6 +137,12 @@ pub fn refresh_devices(request_client: &reqwest::Client, app: AppHandle, port: u
         match response {
             Ok(response) => {
                 if let Some(data) = response.data {
+                    let devices = app.state::<Devices>();
+                    {
+                        let mut devices = devices.devices.write().await;
+                        *devices = data.devices.clone();
+                    }
+                    info!("Got devices");
                     let tray_handle = app.tray_handle();
                     let system_menu = generate_system_tray_menu(&data.devices);
                     if let Ok(system_menu) = system_menu {

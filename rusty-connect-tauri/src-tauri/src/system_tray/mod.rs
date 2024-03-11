@@ -7,13 +7,21 @@ use tauri::{
 };
 use tracing::{info, warn};
 
-use crate::plugins::clipboard::send_clipboard;
+use crate::{plugins::clipboard::send_clipboard, refresh_devices, GQL_PORT, REQWEST_CLIENT};
 
 pub fn generate_system_tray_menu(
     devices: &[DeviceWithStateFields],
 ) -> anyhow::Result<SystemTrayMenu> {
-    let mut system_menu =
-        SystemTrayMenu::new().add_item(CustomMenuItem::new("devices", "Devices").disabled());
+    let mut system_menu = SystemTrayMenu::new()
+        .add_item(CustomMenuItem::new("devices", "Devices").disabled())
+        .add_item({
+            let mut item = CustomMenuItem::new("refresh", "Refresh");
+            #[cfg(target_os = "macos")]
+            {
+                item = item.native_image(tauri::NativeImage::Refresh)
+            }
+            item
+        });
     for device in devices.iter().filter(|d| d.is_connected && d.device.paired) {
         let mut menu = SystemTrayMenu::new();
         if let Some(battery) = &device.device.plugin_states.batttery.last_status {
@@ -29,7 +37,6 @@ pub fn generate_system_tray_menu(
                 .disabled(),
             )
         }
-
         menu = menu.add_item(CustomMenuItem::new(
             format!("{};send_clipboard", device.device.id),
             "Send Clipboard",
@@ -45,9 +52,9 @@ pub fn generate_system_tray_menu(
     let quit = CustomMenuItem::new("quit".to_string(), "Quit");
     let hide = CustomMenuItem::new("open".to_string(), "Open");
     system_menu = system_menu
-        .add_item(quit)
+        .add_item(hide)
         .add_native_item(SystemTrayMenuItem::Separator)
-        .add_item(hide);
+        .add_item(quit);
     Ok(system_menu)
 }
 
@@ -77,6 +84,15 @@ pub fn handle_system_tray(app: &AppHandle, event: SystemTrayEvent) {
         SystemTrayEvent::MenuItemClick { id, tray_id, .. } => match id.as_str() {
             "quit" => {
                 app.exit(0);
+            }
+            "refresh" => {
+                info!("Refreshing");
+                let app = app.app_handle();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(err) = refresh_devices(app).await {
+                        warn!("Cannot refresh {err:?}")
+                    }
+                });
             }
             "open" => {
                 let window = app.get_window("main");

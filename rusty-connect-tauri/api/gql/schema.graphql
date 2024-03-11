@@ -97,7 +97,7 @@ type PingConfig {
 }
 
 type PingPayload {
-  pinged: Boolean!
+  message: String
 }
 
 type PingState {

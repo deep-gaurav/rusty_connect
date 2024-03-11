@@ -30,13 +30,15 @@ impl Plugin for Ping {
     fn parse_payload(
         &self,
         payload: &crate::payloads::Payload,
-        state: &mut Self::PluginState,
+        _state: &mut Self::PluginState,
     ) -> Option<Self::PluginPayload> {
         if payload.r#type == "kdeconnect.ping" {
-            Some(PingPayload { pinged: true })
-        } else {
-            None
+            let payload = serde_json::from_value::<Self::PluginPayload>(payload.body.clone());
+            if let Ok(payload) = payload {
+                return Some(payload);
+            }
         }
+        None
     }
 
     fn is_enabled(&self, config: &Option<Self::PluginConfig>) -> bool {
@@ -48,9 +50,9 @@ impl Plugin for Ping {
     }
 }
 
-#[derive(SimpleObject, Serialize)]
+#[derive(SimpleObject, Serialize, Deserialize)]
 pub struct PingPayload {
-    pinged: bool,
+    message: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone, SimpleObject)]

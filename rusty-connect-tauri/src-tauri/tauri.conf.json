@@ -17,6 +17,9 @@
     },
     "allowlist": {
       "all": false,
+      "notification": {
+        "all": true
+      },
       "shell": {
         "all": false,
         "open": true
