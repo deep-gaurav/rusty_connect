@@ -17,6 +17,7 @@ impl Ping {
 impl Plugin for Ping {
     type PluginPayload = PingPayload;
     type PluginConfig = PingConfig;
+    type PluginState = PingState;
 
     fn incoming_capabilities(&self) -> Vec<String> {
         vec!["kdeconnect.ping".to_string()]
@@ -26,7 +27,11 @@ impl Plugin for Ping {
         vec!["kdeconnect.ping".to_string()]
     }
 
-    fn parse_payload(&self, payload: &crate::payloads::Payload) -> Option<Self::PluginPayload> {
+    fn parse_payload(
+        &self,
+        payload: &crate::payloads::Payload,
+        state: &mut Self::PluginState,
+    ) -> Option<Self::PluginPayload> {
         if payload.r#type == "kdeconnect.ping" {
             Some(PingPayload { pinged: true })
         } else {
@@ -50,5 +55,10 @@ pub struct PingPayload {
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone, SimpleObject)]
 pub struct PingConfig {
+    enabled: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone, SimpleObject)]
+pub struct PingState {
     enabled: bool,
 }

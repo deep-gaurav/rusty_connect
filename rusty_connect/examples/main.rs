@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use rusty_connect::{
     devices::DeviceManager,
@@ -26,7 +26,15 @@ pub async fn main() -> anyhow::Result<()> {
     let device_id = uuid::Uuid::new_v4().to_string();
     let device_type = "laptop";
 
-    let mut rusty = RustyConnect::new(&device_id, device_name, device_type, "cert", "key");
+    let mut rusty = RustyConnect::new(
+        &device_id,
+        device_name,
+        device_type,
+        "cert",
+        "key",
+        &PathBuf::new().join("device_configs"),
+    )
+    .await?;
 
     rusty.run(3000).await?;
     Ok(())

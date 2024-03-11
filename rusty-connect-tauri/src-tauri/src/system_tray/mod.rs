@@ -1,3 +1,5 @@
+use std::fmt::format;
+
 use api::all_devices::DeviceWithStateFields;
 use tauri::{
     AppHandle, CustomMenuItem, Manager, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem,
@@ -13,7 +15,22 @@ pub fn generate_system_tray_menu(
     let mut system_menu =
         SystemTrayMenu::new().add_item(CustomMenuItem::new("devices", "Devices").disabled());
     for device in devices.iter().filter(|d| d.is_connected && d.device.paired) {
-        let menu = SystemTrayMenu::new().add_item(CustomMenuItem::new(
+        let mut menu = SystemTrayMenu::new();
+        if let Some(battery) = &device.device.plugin_states.batttery.last_status {
+            menu = menu.add_item(
+                CustomMenuItem::new(
+                    format!("{};battery", device.device.id),
+                    if battery.is_charging {
+                        format!("Battery: {}% (Charging)", battery.current_charge)
+                    } else {
+                        format!("Battery: {}%", battery.current_charge)
+                    },
+                )
+                .disabled(),
+            )
+        }
+
+        menu = menu.add_item(CustomMenuItem::new(
             format!("{};send_clipboard", device.device.id),
             "Send Clipboard",
         ));

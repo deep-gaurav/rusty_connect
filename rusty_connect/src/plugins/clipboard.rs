@@ -29,6 +29,7 @@ impl Clipboard {
 impl Plugin for Clipboard {
     type PluginPayload = ClipboardPayload;
     type PluginConfig = ClipboardConfig;
+    type PluginState = ClipboardState;
 
     fn incoming_capabilities(&self) -> Vec<String> {
         vec![
@@ -44,8 +45,14 @@ impl Plugin for Clipboard {
         ]
     }
 
-    fn parse_payload(&self, payload: &crate::payloads::Payload) -> Option<Self::PluginPayload> {
-        if payload.r#type == "kdeconnect.clipboard" {
+    fn parse_payload(
+        &self,
+        payload: &crate::payloads::Payload,
+        state: &mut Self::PluginState,
+    ) -> Option<Self::PluginPayload> {
+        if payload.r#type == "kdeconnect.clipboard"
+            || payload.r#type == "kdeconnect.clipboard.connect"
+        {
             let payload = serde_json::from_value::<Self::PluginPayload>(payload.body.clone());
             if let Ok(payload) = payload {
                 return Some(payload);
@@ -70,5 +77,10 @@ pub struct ClipboardPayload {
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone, SimpleObject)]
 pub struct ClipboardConfig {
+    enabled: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone, SimpleObject)]
+pub struct ClipboardState {
     enabled: bool,
 }

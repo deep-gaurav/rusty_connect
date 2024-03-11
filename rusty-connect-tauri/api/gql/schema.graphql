@@ -1,3 +1,27 @@
+type BatteryConfig {
+  enabled: Boolean!
+}
+
+enum BatteryEventType {
+  NONE
+  BATTERY_LOW
+  UNKNOWN
+}
+
+type BatteryPayload {
+  currentCharge: Int!
+  isCharging: Boolean!
+  thresholdEvent: BatteryEventType!
+}
+
+type BatteryState {
+  lastStatus: BatteryPayload
+}
+
+type Batttery {
+  sendBatery: String!
+}
+
 type Clipboard {
   sendClipboard(deviceId: String, content: String!): String!
 }
@@ -10,6 +34,10 @@ type ClipboardPayload {
   content: String!
 }
 
+type ClipboardState {
+  enabled: Boolean!
+}
+
 type Connected {
   id: String!
 }
@@ -19,6 +47,7 @@ type Device {
   identity: IdentityPayloadBody!
   paired: Boolean!
   pluginConfigs: PluginConfigs!
+  pluginStates: PluginStates!
 }
 
 type DeviceWithState {
@@ -71,14 +100,26 @@ type PingPayload {
   pinged: Boolean!
 }
 
+type PingState {
+  enabled: Boolean!
+}
+
 type PluginConfigs {
   ping: PingConfig
   clipboard: ClipboardConfig
+  batttery: BatteryConfig
 }
 
 type PluginManager {
   ping: Ping!
   clipboard: Clipboard!
+  batttery: Batttery!
+}
+
+type PluginStates {
+  ping: PingState!
+  clipboard: ClipboardState!
+  batttery: BatteryState!
 }
 
 type Query {
@@ -99,6 +140,7 @@ union ReceivedPayload =
   | PairPayloadBody
   | PingPayload
   | ClipboardPayload
+  | BatteryPayload
   | Payload
 
 type Subscription {

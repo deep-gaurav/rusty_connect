@@ -1,4 +1,4 @@
-fragment IdentityPayloadFields on IdentityPayloadBody{
+fragment IdentityPayloadFields on IdentityPayloadBody {
   deviceId
   deviceName
   deviceType
@@ -7,94 +7,109 @@ fragment IdentityPayloadFields on IdentityPayloadBody{
   tcpPort
   protocolVersion
 }
+fragment BatteryFields on BatteryPayload {
+  thresholdEvent
+  currentCharge
+  isCharging
+}
 
 fragment DeviceFields on Device {
   id
-  identity{
+  identity {
     ...IdentityPayloadFields
   }
   paired
-  pluginConfigs{
-    ping{
+  pluginConfigs {
+    ping {
       enabled
     }
-    clipboard{
+    clipboard {
       enabled
+    }
+  }
+  pluginStates {
+    batttery {
+      lastStatus{
+        ...BatteryFields
+      }
     }
   }
 }
 
 fragment DeviceWithStateFields on DeviceWithState {
-  device{
+  device {
     ...DeviceFields
   }
   isConnected
 }
 
-fragment RecievedPayloadFields on ReceivedPayload{
-    __typename
-    ... on Connected{
-      id
-    }
-    ... on Disconnected {
-      id
-    }
-    ... on Payload{
-      id
-      type
-      body
-    }
-    ... on IdentityPayloadBody{
-      ...IdentityPayloadFields
-    }
-    ... on PairPayloadBody{
-      pair
-    }
-    ... on ClipboardPayload{
-      content
-    }
-    ... on PingPayload{
-      pinged
-    }
+fragment RecievedPayloadFields on ReceivedPayload {
+  __typename
+  ... on Connected {
+    id
+  }
+  ... on Disconnected {
+    id
+  }
+  ... on Payload {
+    id
+    type
+    body
+  }
+  ... on IdentityPayloadBody {
+    ...IdentityPayloadFields
+  }
+  ... on PairPayloadBody {
+    pair
+  }
+  ... on ClipboardPayload {
+    content
+  }
+  ... on PingPayload {
+    pinged
+  }
+  ... on BatteryPayload {
+    ...BatteryFields
+  }
 }
 
 query AllDevices {
-  devices{
+  devices {
     ...DeviceWithStateFields
   }
 }
 
-query Device($id:String!){
-  device(id:$id){
+query Device($id: String!) {
+  device(id: $id) {
     ...DeviceWithStateFields
   }
 }
 
-mutation Pair($id:String!, $pair:Boolean!){
-  pair(id:$id, pair:$pair){
+mutation Pair($id: String!, $pair: Boolean!) {
+  pair(id: $id, pair: $pair) {
     ...DeviceWithStateFields
   }
 }
 
-mutation BroadcastUdp{
-  broadcastIdentityUdp{
+mutation BroadcastUdp {
+  broadcastIdentityUdp {
     ...IdentityPayloadFields
   }
 }
 
-mutation SendClipboard($content:String!, $deviceId:String){
-  plugins{
-    clipboard{
-      sendClipboard(deviceId:$deviceId, content:$content)
+mutation SendClipboard($content: String!, $deviceId: String) {
+  plugins {
+    clipboard {
+      sendClipboard(deviceId: $deviceId, content: $content)
     }
   }
 }
 
-subscription ConnectionSubscription{
-  payloads{
+subscription ConnectionSubscription {
+  payloads {
     deviceId
-    payload{
-				...RecievedPayloadFields
+    payload {
+      ...RecievedPayloadFields
     }
   }
 }

@@ -7,7 +7,7 @@ use tracing::debug;
 
 use crate::{
     payloads::{IdentityPayloadBody, PairPayloadBody, Payload, PayloadType, RustyPayload},
-    plugins::PluginConfigs,
+    plugins::{PluginConfigs, PluginStates},
 };
 
 pub struct DeviceManager {
@@ -68,6 +68,7 @@ impl DeviceManager {
                     id: identity.device_id.clone(),
                     identity,
                     plugin_configs: PluginConfigs::default(),
+                    plugin_states: PluginStates::default(),
                 },
                 state: DeviceState::InActive,
             });
@@ -168,6 +169,8 @@ pub struct Device {
     pub identity: IdentityPayloadBody,
     pub paired: bool,
     pub plugin_configs: PluginConfigs,
+    #[serde(skip)]
+    pub plugin_states: PluginStates,
 }
 
 #[derive(Clone)]

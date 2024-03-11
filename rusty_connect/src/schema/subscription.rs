@@ -40,11 +40,9 @@ impl Subscription {
                         }
                     }
                     PayloadType::ConnectionPayload(device_id,payload) => {
-                        let device = {
-                            let dm =  device_manager.read().await;
-                            let device =  dm.devices.get(&device_id);
-                            device.cloned()
-                        };
+                        let mut dm =  device_manager.write().await;
+                        let device =  dm.devices.get_mut(&device_id);
+
                         if let Some(device) = device {
 
                             match payload {
@@ -65,7 +63,7 @@ impl Subscription {
                                     )
                                 },
                                 crate::payloads::RustyPayload::KDEConnectPayload(payload) => {
-                                    if let Ok(payload) = plugin_manager.parse_payload(payload,Some(&device.device)){
+                                    if let Ok(payload) = plugin_manager.parse_payload(payload,Some(&mut device.device)){
                                         yield ReceivedMessage { device_id:Some(device_id), payload }
                                     }
                                 },

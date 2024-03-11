@@ -97,7 +97,11 @@ pub async fn listen_to_server(
                             warn!("Cant write to clipboard {err:?}")
                         }
                     },
-                    connection_subscription::ConnectionSubscriptionPayloadsPayload::Payload(_) => {},
+                    connection_subscription::RecievedPayloadFields::BatteryPayload(data)=> {
+                        info!("Received battery update {data:?}");
+                        refresh_devices(&request_client, app.clone(), port);
+                    }
+                    connection_subscription::RecievedPayloadFields::Payload(_)=>{}
                 }
             }
         }
