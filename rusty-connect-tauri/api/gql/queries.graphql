@@ -74,6 +74,14 @@ mutation BroadcastUdp{
   }
 }
 
+mutation SendClipboard($content:String!, $deviceId:String){
+  plugins{
+    clipboard{
+      sendClipboard(deviceId:$deviceId, content:$content)
+    }
+  }
+}
+
 subscription ConnectionSubscription{
   payloads{
     deviceId

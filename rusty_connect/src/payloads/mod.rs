@@ -15,7 +15,7 @@ pub enum PayloadType {
     ConnectionPayload(String, RustyPayload),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Payload {
     pub id: u128,

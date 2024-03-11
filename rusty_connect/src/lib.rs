@@ -229,6 +229,8 @@ impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
                 device_manager: self.device_manager.clone(),
             },
         )
+        .data(self.device_manager.clone())
+        .data(self.plugin_manager.clone())
         .finish();
 
         let app = axum::Router::new()

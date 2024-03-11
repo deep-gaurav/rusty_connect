@@ -1,7 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::{error::Error, fmt::format};
+use std::error::Error;
 
 use api::{BroadcastUdp, Pair};
 use gql_subscription::listen_to_server;
@@ -14,7 +14,10 @@ use tauri::{
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+use plugins::clipboard::send_clipboard;
+
 pub mod gql_subscription;
+pub mod plugins;
 pub mod server;
 
 static REQWEST_CLIENT: Lazy<reqwest::Client> = Lazy::new(reqwest::Client::new);
@@ -30,7 +33,6 @@ async fn refresh_devices(app: AppHandle) -> Result<(), String> {
     )
     .await
     .map_err(|e| format!("{e:?}"));
-    info!("Broadcasted UDP");
     gql_subscription::refresh_devices(&REQWEST_CLIENT, app, GQL_PORT);
     Ok(())
 }
@@ -102,7 +104,11 @@ fn main() {
         .init();
 
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![refresh_devices, pair])
+        .invoke_handler(tauri::generate_handler![
+            refresh_devices,
+            pair,
+            send_clipboard
+        ])
         .setup(setup)
         .system_tray(tray)
         .on_system_tray_event(|app, event| match event {
@@ -141,19 +147,28 @@ fn main() {
                             "main", /* the unique window label */
                             tauri::WindowUrl::App("index.html".into()),
                         )
+                        .title("RustyConnect")
                         .build();
                         if let Ok(main_window) = main_window {
                             if let Err(err) = main_window.show() {
-                                warn!("Cannot show new main window")
+                                warn!("Cannot show new main window {err:?}")
                             }
                         }
                     }
                 }
                 id => {
-                    let mut splits = id.split(";");
+                    let mut splits = id.split(';');
                     if let (Some(device_id), Some("send_clipboard")) =
                         (splits.next(), splits.next())
-                    {}
+                    {
+                        let device_id = Some(device_id.to_string());
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            if let Err(err) = send_clipboard(app, device_id).await {
+                                warn!("Cant send clipboard {err:?}")
+                            }
+                        });
+                    }
                     info!("Clicked id {id} and tray_id {tray_id} ")
                 }
             },

@@ -1,5 +1,5 @@
-use async_graphql::{Object, SimpleObject};
-use serde::Deserialize;
+use async_graphql::{Context, Object, SimpleObject};
+use serde::{Deserialize, Serialize};
 
 use super::Plugin;
 
@@ -8,7 +8,20 @@ pub struct Clipboard;
 
 #[Object]
 impl Clipboard {
-    pub async fn send_clipboard(&self) -> anyhow::Result<&str> {
+    pub async fn send_clipboard<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        device_id: Option<String>,
+        content: String,
+    ) -> anyhow::Result<&str> {
+        let clipboard_payload = ClipboardPayload { content };
+        self.send_payload(
+            context,
+            device_id.as_deref(),
+            "kdeconnect.clipboard",
+            clipboard_payload,
+        )
+        .await?;
         Ok("success")
     }
 }
@@ -19,14 +32,14 @@ impl Plugin for Clipboard {
     fn incoming_capabilities(&self) -> Vec<String> {
         vec![
             "kdeconnect.clipboard".to_string(),
-            // TODO: "kdeconnect.clipboard.connect".to_string()
+            "kdeconnect.clipboard.connect".to_string(), // TODO: figure out what this does? autosync?
         ]
     }
 
     fn outgoing_capabilities(&self) -> Vec<String> {
         vec![
             "kdeconnect.clipboard".to_string(),
-            // TODO: "kdeconnect.clipboard.connect".to_string()
+            "kdeconnect.clipboard.connect".to_string(), // TODO: figure out what this does? autosync?
         ]
     }
 
@@ -41,7 +54,7 @@ impl Plugin for Clipboard {
     }
 }
 
-#[derive(SimpleObject, Deserialize)]
+#[derive(SimpleObject, Deserialize, Serialize)]
 pub struct ClipboardPayload {
     pub content: String,
 }

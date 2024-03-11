@@ -52,3 +52,11 @@ pub struct BroadcastUdp;
     response_derives = "Debug"
 )]
 pub struct Pair;
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    query_path = "gql/queries.graphql",
+    schema_path = "gql/schema.graphql",
+    response_derives = "Debug"
+)]
+pub struct SendClipboard;

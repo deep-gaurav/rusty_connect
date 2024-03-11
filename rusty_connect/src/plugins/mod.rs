@@ -1,7 +1,14 @@
-use async_graphql::Union;
+use std::sync::Arc;
+
+use anyhow::Ok;
+use async_graphql::{Context, Union};
 use async_graphql::{Object, ObjectType, SimpleObject};
 use paste::paste;
+use serde::Serialize;
+use tokio::sync::RwLock;
+use tracing::warn;
 
+use crate::devices::{DeviceManager, DeviceState};
 use crate::payloads::{IdentityPayloadBody, PairPayloadBody, Payload};
 
 use self::{clipboard::Clipboard, ping::Ping};
@@ -10,12 +17,58 @@ pub mod clipboard;
 pub mod ping;
 
 pub trait Plugin: async_graphql::ObjectType + Default {
-    type PluginPayload: ObjectType;
+    type PluginPayload: ObjectType + Serialize;
 
     fn incoming_capabilities(&self) -> Vec<String>;
     fn outgoing_capabilities(&self) -> Vec<String>;
 
     fn parse_payload(&self, payload: &Payload) -> Option<Self::PluginPayload>;
+
+    fn send_payload<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        device_id: Option<&str>,
+        payload_type: &str,
+        payload: Self::PluginPayload,
+    ) -> impl std::future::Future<Output = anyhow::Result<()>> + Send {
+        async move {
+            let device_manager = {
+                context
+                    .data::<Arc<RwLock<DeviceManager>>>()
+                    .map_err(|e| anyhow::anyhow!("{e:?}"))?
+                    .read()
+                    .await
+                    .devices
+                    .clone()
+            };
+            let serialized_value = serde_json::to_value(&payload)?;
+            let payload = Payload::generate_new(payload_type, serialized_value);
+            if let Some(device_id) = device_id {
+                let device = device_manager
+                    .get(device_id)
+                    .ok_or(anyhow::anyhow!("No device with given id"))?;
+                if !device.device.paired {
+                    return Err(anyhow::anyhow!("Device not paired"));
+                }
+                if let DeviceState::Active(_, sender) = &device.state {
+                    sender.send_async(payload).await?;
+                } else {
+                    return Err(anyhow::anyhow!("Device not connected"));
+                }
+            } else {
+                for (_, device) in device_manager.iter() {
+                    if device.device.paired {
+                        if let DeviceState::Active(_, sender) = &device.state {
+                            if let Err(err) = sender.send_async(payload.clone()).await {
+                                warn!("Failed to send {err:?}")
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }
+    }
 }
 
 macro_rules! register_plugins {

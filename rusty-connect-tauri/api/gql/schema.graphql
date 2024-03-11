@@ -1,5 +1,5 @@
 type Clipboard {
-  sendClipboard: String!
+  sendClipboard(deviceId: String, content: String!): String!
 }
 
 type ClipboardPayload {

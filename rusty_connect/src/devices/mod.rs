@@ -143,8 +143,8 @@ impl DeviceManager {
 
 #[derive(Clone)]
 pub struct DeviceWithState {
-    device: Device,
-    state: DeviceState,
+    pub device: Device,
+    pub state: DeviceState,
 }
 
 #[Object]

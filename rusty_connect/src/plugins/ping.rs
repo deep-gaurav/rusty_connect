@@ -1,4 +1,5 @@
 use async_graphql::{Object, SimpleObject};
+use serde::Serialize;
 use tracing::info;
 
 use super::Plugin;
@@ -33,7 +34,7 @@ impl Plugin for Ping {
     }
 }
 
-#[derive(SimpleObject)]
+#[derive(SimpleObject, Serialize)]
 pub struct PingPayload {
     pinged: bool,
 }
