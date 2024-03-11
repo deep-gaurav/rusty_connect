@@ -12,6 +12,8 @@ use graphql_ws_client::Client;
 use tauri::{AppHandle, CustomMenuItem, SystemTrayMenu, SystemTrayMenuItem, SystemTraySubmenu};
 use tracing::{debug, info, warn};
 
+use crate::system_tray::generate_system_tray_menu;
+
 pub async fn listen_to_server(
     port: u32,
     app: &AppHandle,
@@ -118,33 +120,11 @@ pub fn refresh_devices(request_client: &reqwest::Client, app: AppHandle, port: u
             Ok(response) => {
                 if let Some(data) = response.data {
                     let tray_handle = app.tray_handle();
-                    let mut system_menu = SystemTrayMenu::new()
-                        .add_item(CustomMenuItem::new("devices", "Devices").disabled());
-                    for device in data
-                        .devices
-                        .iter()
-                        .filter(|d| d.is_connected && d.device.paired)
-                    {
-                        let menu = SystemTrayMenu::new().add_item(CustomMenuItem::new(
-                            format!("{};send_clipboard", device.device.id),
-                            "Send Clipboard",
-                        ));
-                        system_menu = system_menu
-                            .add_submenu(SystemTraySubmenu::new(
-                                device.device.identity.device_name.clone(),
-                                menu,
-                            ))
-                            .add_native_item(SystemTrayMenuItem::Separator);
-                    }
-
-                    let quit = CustomMenuItem::new("quit".to_string(), "Quit");
-                    let hide = CustomMenuItem::new("open".to_string(), "Open");
-                    system_menu = system_menu
-                        .add_item(quit)
-                        .add_native_item(SystemTrayMenuItem::Separator)
-                        .add_item(hide);
-                    if let Err(err) = tray_handle.set_menu(system_menu) {
-                        warn!("Cannot update system tray menu {err:?}")
+                    let system_menu = generate_system_tray_menu(&data.devices);
+                    if let Ok(system_menu) = system_menu {
+                        if let Err(err) = tray_handle.set_menu(system_menu) {
+                            warn!("Cannot update system tray menu {err:?}")
+                        }
                     }
                     // info!("Received device list {data:?}");
                     if let Err(err) = (API {

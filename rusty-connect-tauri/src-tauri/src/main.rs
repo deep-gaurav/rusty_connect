@@ -7,6 +7,7 @@ use api::{BroadcastUdp, Pair};
 use gql_subscription::listen_to_server;
 use once_cell::sync::{Lazy, OnceCell};
 use server::run_server;
+use system_tray::generate_system_tray_menu;
 use tauri::{
     App, AppHandle, CustomMenuItem, Manager, RunEvent, SystemTray, SystemTrayEvent, SystemTrayMenu,
     SystemTrayMenuItem, Url,
@@ -19,6 +20,7 @@ use plugins::clipboard::send_clipboard;
 pub mod gql_subscription;
 pub mod plugins;
 pub mod server;
+pub mod system_tray;
 
 static REQWEST_CLIENT: Lazy<reqwest::Client> = Lazy::new(reqwest::Client::new);
 static MAIN_URL: OnceCell<Url> = OnceCell::new();
@@ -90,12 +92,8 @@ fn main() {
     let filter_layer = tracing_subscriber::EnvFilter::try_from_default_env()
         .or_else(|_| tracing_subscriber::EnvFilter::try_new("info"))
         .unwrap();
-    let quit = CustomMenuItem::new("quit".to_string(), "Quit");
-    let hide = CustomMenuItem::new("open".to_string(), "Open");
-    let tray_menu = SystemTrayMenu::new()
-        .add_item(quit)
-        .add_native_item(SystemTrayMenuItem::Separator)
-        .add_item(hide);
+
+    let tray_menu = generate_system_tray_menu(&[]).unwrap_or_default();
     let tray = SystemTray::new().with_menu(tray_menu);
 
     tracing_subscriber::registry()
@@ -111,73 +109,21 @@ fn main() {
         ])
         .setup(setup)
         .system_tray(tray)
-        .on_system_tray_event(|app, event| match event {
-            SystemTrayEvent::LeftClick {
-                position: _,
-                size: _,
-                ..
-            } => {
-                println!("system tray received a left click");
-            }
-            SystemTrayEvent::RightClick {
-                position: _,
-                size: _,
-                ..
-            } => {
-                println!("system tray received a right click");
-            }
-            SystemTrayEvent::DoubleClick {
-                position: _,
-                size: _,
-                ..
-            } => {
-                println!("system tray received a double click");
-            }
-            SystemTrayEvent::MenuItemClick { id, tray_id, .. } => match id.as_str() {
-                "quit" => {
-                    app.exit(0);
-                }
-                "open" => {
-                    let window = app.get_window("main");
-                    if let Some(window) = window {
-                        window.show().unwrap();
-                    } else {
-                        let main_window = tauri::WindowBuilder::new(
-                            app,
-                            "main", /* the unique window label */
-                            tauri::WindowUrl::App("index.html".into()),
-                        )
-                        .title("RustyConnect")
-                        .build();
-                        if let Ok(main_window) = main_window {
-                            if let Err(err) = main_window.show() {
-                                warn!("Cannot show new main window {err:?}")
-                            }
-                        }
-                    }
-                }
-                id => {
-                    let mut splits = id.split(';');
-                    if let (Some(device_id), Some("send_clipboard")) =
-                        (splits.next(), splits.next())
-                    {
-                        let device_id = Some(device_id.to_string());
-                        let app = app.clone();
-                        tauri::async_runtime::spawn(async move {
-                            if let Err(err) = send_clipboard(app, device_id).await {
-                                warn!("Cant send clipboard {err:?}")
-                            }
-                        });
-                    }
-                    info!("Clicked id {id} and tray_id {tray_id} ")
-                }
-            },
-            _ => {}
-        })
+        .on_system_tray_event(system_tray::handle_system_tray)
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         .run(|_app, event| {
             if let RunEvent::ExitRequested { api, .. } = event {
+                #[cfg(target_os = "macos")]
+                {
+                    use cocoa::appkit::{NSApp, NSApplication, NSApplicationActivationPolicy};
+                    unsafe {
+                        let app = NSApp();
+                        app.setActivationPolicy_(
+                            NSApplicationActivationPolicy::NSApplicationActivationPolicyAccessory,
+                        );
+                    }
+                }
                 api.prevent_exit();
             }
         });
