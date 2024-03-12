@@ -11,7 +11,7 @@ pub type JSON = serde_json::Value;
 #[graphql(
     query_path = "gql/queries.graphql",
     schema_path = "gql/schema.graphql",
-    response_derives = "Debug,Clone,Serialize,Deserialize,PartialEq,Eq"
+    response_derives = "Debug,Clone,Serialize,Deserialize,PartialEq"
 )]
 pub struct AllDevices;
 
@@ -60,3 +60,11 @@ pub struct Pair;
     response_derives = "Debug"
 )]
 pub struct SendClipboard;
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    query_path = "gql/queries.graphql",
+    schema_path = "gql/schema.graphql",
+    response_derives = "Debug"
+)]
+pub struct SendBattery;

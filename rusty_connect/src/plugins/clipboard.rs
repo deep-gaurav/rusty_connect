@@ -66,6 +66,18 @@ impl Plugin for Clipboard {
             true
         }
     }
+    fn should_send(
+        &self,
+        config: &Option<Self::PluginConfig>,
+        _state: &mut Self::PluginState,
+        _payload: &Self::PluginPayload,
+    ) -> bool {
+        if let Some(config) = config {
+            config.send_enabled
+        } else {
+            true
+        }
+    }
 }
 
 #[derive(SimpleObject, Deserialize, Serialize)]
@@ -76,6 +88,7 @@ pub struct ClipboardPayload {
 #[derive(Debug, Serialize, Deserialize, Default, Clone, SimpleObject)]
 pub struct ClipboardConfig {
     enabled: bool,
+    send_enabled: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone, SimpleObject)]

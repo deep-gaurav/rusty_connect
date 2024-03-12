@@ -48,6 +48,19 @@ impl Plugin for Ping {
             true
         }
     }
+
+    fn should_send(
+        &self,
+        config: &Option<Self::PluginConfig>,
+        state: &mut Self::PluginState,
+        payload: &Self::PluginPayload,
+    ) -> bool {
+        if let Some(config) = config {
+            config.send_enabled
+        } else {
+            true
+        }
+    }
 }
 
 #[derive(SimpleObject, Serialize, Deserialize)]
@@ -58,6 +71,7 @@ pub struct PingPayload {
 #[derive(Debug, Serialize, Deserialize, Default, Clone, SimpleObject)]
 pub struct PingConfig {
     enabled: bool,
+    send_enabled: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone, SimpleObject)]

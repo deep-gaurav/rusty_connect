@@ -28,6 +28,12 @@ pub trait Plugin: async_graphql::ObjectType + Default {
     fn outgoing_capabilities(&self) -> Vec<String>;
 
     fn is_enabled(&self, config: &Option<Self::PluginConfig>) -> bool;
+    fn should_send(
+        &self,
+        config: &Option<Self::PluginConfig>,
+        state: &mut Self::PluginState,
+        payload: &Self::PluginPayload,
+    ) -> bool;
 
     fn parse_payload(
         &self,
@@ -71,43 +77,44 @@ trait PluginExt: Plugin {
         payload: Self::PluginPayload,
     ) -> impl std::future::Future<Output = anyhow::Result<()>> + Send {
         async move {
-            let device_manager = {
-                context
-                    .data::<Arc<RwLock<DeviceManager>>>()
-                    .map_err(|e| anyhow::anyhow!("{e:?}"))?
-                    .read()
-                    .await
-                    .devices
-                    .clone()
-            };
+            let mut device_manager = context
+                .data::<Arc<RwLock<DeviceManager>>>()
+                .map_err(|e| anyhow::anyhow!("{e:?}"))?
+                .write()
+                .await;
+            let devices = &mut device_manager.devices;
             let serialized_value = serde_json::to_value(&payload)?;
-            let payload = Payload::generate_new(payload_type, serialized_value);
+            let serialized_payload = Payload::generate_new(payload_type, serialized_value);
             if let Some(device_id) = device_id {
-                let device = device_manager
-                    .get(device_id)
+                let device = devices
+                    .get_mut(device_id)
                     .ok_or(anyhow::anyhow!("No device with given id"))?;
                 if !device.device.paired {
                     return Err(anyhow::anyhow!("Device not paired"));
                 }
-                if !self.is_enabled(Self::get_config_from_plugin_configs(
-                    &device.device.plugin_configs,
-                )) {
+                if !self.should_send(
+                    Self::get_config_from_plugin_configs(&device.device.plugin_configs),
+                    Self::get_state_from_plugin_states(&mut device.device.plugin_states),
+                    &payload,
+                ) {
                     return Err(anyhow::anyhow!("Plugin disabled for config"));
                 }
                 if let DeviceState::Active(_, sender) = &device.state {
-                    sender.send_async(payload).await?;
+                    sender.send_async(serialized_payload).await?;
                 } else {
                     return Err(anyhow::anyhow!("Device not connected"));
                 }
             } else {
-                for (_, device) in device_manager.iter() {
+                for (_, device) in devices.iter_mut() {
                     if device.device.paired
-                        && self.is_enabled(Self::get_config_from_plugin_configs(
-                            &device.device.plugin_configs,
-                        ))
+                        && self.should_send(
+                            Self::get_config_from_plugin_configs(&device.device.plugin_configs),
+                            Self::get_state_from_plugin_states(&mut device.device.plugin_states),
+                            &payload,
+                        )
                     {
                         if let DeviceState::Active(_, sender) = &device.state {
-                            if let Err(err) = sender.send_async(payload.clone()).await {
+                            if let Err(err) = sender.send_async(serialized_payload.clone()).await {
                                 warn!("Failed to send {err:?}")
                             }
                         }

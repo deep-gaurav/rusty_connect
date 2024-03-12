@@ -15,7 +15,9 @@ use tauri::{
 };
 use tracing::{debug, info, warn};
 
-use crate::{state::Devices, system_tray::generate_system_tray_menu};
+use crate::{
+    plugins::battery::send_batery, state::Devices, system_tray::generate_system_tray_menu,
+};
 
 pub async fn listen_to_server(
     port: u32,
@@ -56,6 +58,12 @@ pub async fn listen_to_server(
         return Err(anyhow::anyhow!("Cannot start server"));
     }
 
+    info!("Running Battery Sender");
+    tauri::async_runtime::spawn(async move {
+        if let Err(err) = send_batery().await {
+            warn!("battery sender stopped {err:?}")
+        }
+    });
     info!("Running GQL Listener");
     let (connection, _) = async_tungstenite::tokio::connect_async(request).await?;
     info!("GQL Listener Started");

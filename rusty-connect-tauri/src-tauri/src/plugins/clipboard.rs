@@ -5,7 +5,7 @@ use tauri::AppHandle;
 use crate::{GQL_PORT, REQWEST_CLIENT};
 
 #[tauri::command]
-pub async fn send_clipboard(app: AppHandle, device_id: Option<String>) -> Result<String, String> {
+pub async fn send_clipboard(device_id: Option<String>) -> Result<String, String> {
     let mut ctx: ClipboardContext = ClipboardProvider::new().unwrap();
     let content = ctx
         .get_contents()

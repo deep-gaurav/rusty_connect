@@ -1,5 +1,6 @@
 type BatteryConfig {
   enabled: Boolean!
+  sendEnabled: Boolean!
 }
 
 enum BatteryEventType {
@@ -9,7 +10,7 @@ enum BatteryEventType {
 }
 
 type BatteryPayload {
-  currentCharge: Int!
+  currentCharge: Float!
   isCharging: Boolean!
   thresholdEvent: BatteryEventType!
 }
@@ -19,7 +20,11 @@ type BatteryState {
 }
 
 type Batttery {
-  sendBatery: String!
+  sendBatery(
+    currentCharge: Float!
+    isCharging: Boolean!
+    deviceId: String
+  ): String!
 }
 
 type Clipboard {
@@ -28,6 +33,7 @@ type Clipboard {
 
 type ClipboardConfig {
   enabled: Boolean!
+  sendEnabled: Boolean!
 }
 
 type ClipboardPayload {
@@ -94,6 +100,7 @@ type Ping {
 
 type PingConfig {
   enabled: Boolean!
+  sendEnabled: Boolean!
 }
 
 type PingPayload {

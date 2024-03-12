@@ -131,7 +131,7 @@ pub fn handle_system_tray(app: &AppHandle, event: SystemTrayEvent) {
                     let device_id = Some(device_id.to_string());
                     let app = app.clone();
                     tauri::async_runtime::spawn(async move {
-                        if let Err(err) = send_clipboard(app, device_id).await {
+                        if let Err(err) = send_clipboard(device_id).await {
                             warn!("Cant send clipboard {err:?}")
                         }
                     });

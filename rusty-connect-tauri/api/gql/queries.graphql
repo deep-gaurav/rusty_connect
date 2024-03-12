@@ -20,11 +20,18 @@ fragment DeviceFields on Device {
   }
   paired
   pluginConfigs {
+    __typename
     ping {
       enabled
+      sendEnabled
     }
     clipboard {
       enabled
+      sendEnabled
+    }
+    batttery{
+      enabled
+      sendEnabled
     }
   }
   pluginStates {
@@ -101,6 +108,14 @@ mutation SendClipboard($content: String!, $deviceId: String) {
   plugins {
     clipboard {
       sendClipboard(deviceId: $deviceId, content: $content)
+    }
+  }
+}
+
+mutation SendBattery($charge:Float!, $isCharging:Boolean!, $deviceId: String){
+  plugins{
+    batttery{
+      sendBatery(currentCharge:$charge, isCharging:$isCharging, deviceId:$deviceId)
     }
   }
 }
