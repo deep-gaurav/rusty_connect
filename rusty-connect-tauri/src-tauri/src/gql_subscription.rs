@@ -13,7 +13,7 @@ use tracing::{debug, info, warn};
 
 use crate::{
     plugins::battery::send_batery,
-    state::{Devices, NotificationState},
+    state::{Devices, NotificationShown, NotificationState},
     system_tray::generate_system_tray_menu,
 };
 
@@ -131,20 +131,21 @@ pub async fn listen_to_server(
 
                             if data.is_cancel == Some(true) {
                                 let mut notifs = state.notifications.write().await;
-                                if let Some(notif) = notifs.remove(&data.id){
-                                    #[cfg(target_os = "linux")]
-                                    {
-
-                                        notif.close();
-                                    }
-                                }
+                                notifs.remove(&data.id);
                                 continue;
                             }
                             
 
-                            //Update notification is it can
+                            {
+                                let notifs = state.notifications.read().await;
+                                if let Some(notif) = notifs.get(&data.id){
+                                    if notif.title == data.title && notif.content == data.text{
+                                        continue;
+                                    }
+                                }
+                            }
                             let mut notification = Notification::new(&app.config().tauri.bundle.identifier).title(title);
-                            if let Some(body) = data.text{
+                            if let Some(body) = &data.text{
                                 notification = notification.body(body);
                             }
                             if let Some(icon) = data.icon_path{
@@ -154,9 +155,13 @@ pub async fn listen_to_server(
                             match notification.show() {
                                 Ok(_)=>{
                                     info!("Showed notification");
+                                    {
+                                        let mut notifs = state.notifications.write().await;
+                                        notifs.insert(data.id.clone(), NotificationShown { id: data.id, title: data.title, content: data.text });
+                                    }
                                 }
                                 Err(err)=>{
-                                    warn!("Cant show notification")
+                                    warn!("Cant show notification {err:?}")
                                 }
                             }
 

@@ -33,6 +33,7 @@ impl Subscription {
         let stream = stream! {
             debug!("Listening for new payload from channel");
             while let Ok(payload_type) = receiver.recv_async().await {
+                debug!("Received payload from channel");
                 match payload_type {
                     PayloadType::Broadcast(payload) => {
                         if let Ok(payload) = plugin_manager.parse_payload(payload, None).await{
@@ -65,13 +66,16 @@ impl Subscription {
                                     )
                                 },
                                 crate::payloads::RustyPayload::KDEConnectPayload(payload) => {
+                                    debug!("parsing payload");
                                     if let Ok(payload) = plugin_manager.parse_payload(payload,Some(device)).await{
+                                        debug!("parsed payload");
                                         {
                                             let mut dm = device_manager.write().await;
                                             if let Some(device) = dm.devices.get_mut(&device_id){
                                                 plugin_manager.update_state(&payload,device);
                                             }
                                         }
+                                        debug!("emitting payload");
                                         yield ReceivedMessage { device_id:Some(device_id), payload }
                                     }
                                 },

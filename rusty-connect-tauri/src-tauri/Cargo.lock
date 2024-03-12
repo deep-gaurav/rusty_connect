@@ -3747,7 +3747,6 @@ dependencies = [
  "futures",
  "graphql-ws-client",
  "graphql_client",
- "notify-rust",
  "once_cell",
  "reqwest",
  "rusty_connect",

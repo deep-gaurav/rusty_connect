@@ -8,5 +8,12 @@ pub struct Devices {
 }
 
 pub struct NotificationState {
-    pub notifications: RwLock<HashMap<String, notify_rust::NotificationHandle>>,
+    pub notifications: RwLock<HashMap<String, NotificationShown>>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct NotificationShown {
+    pub id: String,
+    pub title: Option<String>,
+    pub content: Option<String>,
 }
