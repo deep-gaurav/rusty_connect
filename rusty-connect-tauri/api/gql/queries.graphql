@@ -12,6 +12,18 @@ fragment BatteryFields on BatteryPayload {
   currentCharge
   isCharging
 }
+fragment NotificationFields on NotificationPayload{
+  id
+  appName
+  iconPath
+  title
+  ticker
+  text
+  silent
+  isCancel
+  isClearable
+  requestReplyId
+}
 
 fragment DeviceFields on Device {
   id
@@ -77,6 +89,9 @@ fragment RecievedPayloadFields on ReceivedPayload {
   }
   ... on BatteryPayload {
     ...BatteryFields
+  }
+  ... on NotificationPayload {
+    ...NotificationFields
   }
 }
 

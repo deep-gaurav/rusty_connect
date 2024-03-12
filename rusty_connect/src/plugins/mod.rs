@@ -1,4 +1,5 @@
 use std::any::TypeId;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::Ok;
@@ -9,20 +10,24 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::warn;
 
-use crate::devices::{Device, DeviceManager, DeviceState};
+use crate::devices::{DeviceManager, DeviceState, DeviceWithState};
 use crate::payloads::{IdentityPayloadBody, PairPayloadBody, Payload};
 
 use self::battery::Batttery;
+use self::notification::Notification;
 use self::{clipboard::Clipboard, ping::Ping};
 
 pub mod battery;
 pub mod clipboard;
+pub mod notification;
 pub mod ping;
 
-pub trait Plugin: async_graphql::ObjectType + Default {
+pub trait Plugin: async_graphql::ObjectType + Sized {
     type PluginPayload: ObjectType + Serialize;
     type PluginConfig: OutputType + Clone + Serialize + Deserialize<'static> + Default;
     type PluginState: OutputType + Clone + Default;
+
+    fn init(device_mangager: &DeviceManager) -> Self;
 
     fn incoming_capabilities(&self) -> Vec<String>;
     fn outgoing_capabilities(&self) -> Vec<String>;
@@ -38,8 +43,10 @@ pub trait Plugin: async_graphql::ObjectType + Default {
     fn parse_payload(
         &self,
         payload: &Payload,
-        state: &mut Self::PluginState,
-    ) -> Option<Self::PluginPayload>;
+        device_address: SocketAddr,
+    ) -> impl std::future::Future<Output = Option<Self::PluginPayload>> + Send;
+
+    fn update_state(&self, _payload: &Self::PluginPayload, _state: &mut Self::PluginState) {}
 }
 
 trait PluginExt: Plugin {
@@ -99,7 +106,7 @@ trait PluginExt: Plugin {
                 ) {
                     return Err(anyhow::anyhow!("Plugin disabled for config"));
                 }
-                if let DeviceState::Active(_, sender) = &device.state {
+                if let DeviceState::Active(_, _, sender) = &device.state {
                     sender.send_async(serialized_payload).await?;
                 } else {
                     return Err(anyhow::anyhow!("Device not connected"));
@@ -113,7 +120,7 @@ trait PluginExt: Plugin {
                             &payload,
                         )
                     {
-                        if let DeviceState::Active(_, sender) = &device.state {
+                        if let DeviceState::Active(_, _, sender) = &device.state {
                             if let Err(err) = sender.send_async(serialized_payload.clone()).await {
                                 warn!("Failed to send {err:?}")
                             }
@@ -205,18 +212,18 @@ macro_rules! register_plugins {
 
             impl PluginManager {
 
-                pub fn new(device_id:String,device_name:String, device_type:String) -> Self {
+                pub fn new(device_id:String,device_name:String, device_type:String, device_manager:&DeviceManager) -> Self {
                     Self {
                         device_id,
                         device_name,
                         device_type,
                         $(
-                            [<$type:lower>]: Default::default(),
+                            [<$type:lower>]: <$type as Plugin>::init(&device_manager),
                         )*
                     }
                 }
 
-                pub fn parse_payload(&self, payload: Payload, device: Option<&mut Device>) -> anyhow::Result<ReceivedPayload> {
+                pub async fn parse_payload(&self, payload: Payload, device: Option<&DeviceWithState>) -> anyhow::Result<ReceivedPayload> {
                     if payload.r#type == "kdeconnect.identity" {
                         let identity = serde_json::from_value::<IdentityPayloadBody>(payload.body)?;
                        return Ok(ReceivedPayload::Identity(identity))
@@ -227,16 +234,29 @@ macro_rules! register_plugins {
                     }
                     if let Some(device) = device {
                         $(
-                            if self.[<$type:lower>].is_enabled($type::get_config_from_plugin_configs(&device.plugin_configs)) {
-                                let mut state = $type::get_state_from_plugin_states(&mut device.plugin_states);
-                                if let Some([<$type:lower _payload>]) = self.[<$type:lower>].parse_payload(&payload, &mut state) {
-                                    return Ok(ReceivedPayload::$type([<$type:lower _payload>]))
+                            if let DeviceState::Active(_,address,_) = device.state {
+                                if self.[<$type:lower>].is_enabled($type::get_config_from_plugin_configs(&device.device.plugin_configs)) {
+                                    if let Some([<$type:lower _payload>]) = self.[<$type:lower>].parse_payload(&payload,address).await {
+                                        return Ok(ReceivedPayload::$type([<$type:lower _payload>]))
+                                    }
                                 }
                             }
                         )*
                     }
                     Ok(ReceivedPayload::Unknown(payload))
+                }
 
+                pub fn update_state(&self,payload:&ReceivedPayload, device:&mut DeviceWithState){
+                    match payload{
+                        $(
+                            ReceivedPayload::$type(data) => {
+                                let state = $type::get_state_from_plugin_states(&mut device.device.plugin_states);
+                                self.[<$type:lower>].update_state(&data, state);
+                            }
+                        )*,
+                        _ => {}
+
+                    }
                 }
             }
 
@@ -279,4 +299,4 @@ impl PluginManager {
     }
 }
 
-register_plugins!(Ping, Clipboard, Batttery);
+register_plugins!(Ping, Clipboard, Batttery, Notification);

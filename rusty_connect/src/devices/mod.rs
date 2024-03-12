@@ -1,4 +1,8 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+};
 
 use async_graphql::{Object, SimpleObject};
 use flume::{Receiver, Sender};
@@ -6,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use crate::{
+    cert::CertPair,
     payloads::{IdentityPayloadBody, PairPayloadBody, Payload, PayloadType, RustyPayload},
     plugins::{PluginConfigs, PluginStates},
 };
@@ -15,6 +20,8 @@ pub struct DeviceManager {
     pub sender: flume::Sender<PayloadType>,
     pub receiver: flume::Receiver<PayloadType>,
     config_path: PathBuf,
+    pub icons_path: PathBuf,
+    pub certs: CertPair,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -24,12 +31,16 @@ struct DeviceConfig {
 
 impl DeviceManager {
     pub async fn load_or_create(
-        device_config: &PathBuf,
+        config_folder: &Path,
         sender: flume::Sender<PayloadType>,
         receiver: flume::Receiver<PayloadType>,
+        certs: CertPair,
     ) -> anyhow::Result<Self> {
+        let device_config = config_folder.join("devices");
+        let icons_path = config_folder.join("icons_path");
+        tokio::fs::create_dir_all(&icons_path).await?;
         let config = 'config: {
-            if let Ok(data) = tokio::fs::read(device_config).await {
+            if let Ok(data) = tokio::fs::read(&device_config).await {
                 if let Ok(config) = serde_json::from_slice(&data) {
                     break 'config config;
                 }
@@ -51,11 +62,14 @@ impl DeviceManager {
             sender,
             receiver,
             config_path: device_config.clone(),
+            icons_path,
+            certs,
         })
     }
 
     pub async fn connected_to(
         &mut self,
+        address: SocketAddr,
         identity: IdentityPayloadBody,
     ) -> anyhow::Result<(Sender<PayloadType>, Receiver<Payload>, uuid::Uuid)> {
         let device_id = identity.device_id.clone();
@@ -75,7 +89,7 @@ impl DeviceManager {
 
         let (tx, rx) = flume::bounded(0);
         let id = uuid::Uuid::new_v4();
-        *state = DeviceState::Active(id, tx);
+        *state = DeviceState::Active(id, address, tx);
         if let Err(err) = self.sender.try_send(PayloadType::ConnectionPayload(
             device_id,
             RustyPayload::Connected,
@@ -109,7 +123,7 @@ impl DeviceManager {
             .ok_or(anyhow::anyhow!("No device with given id"))?;
         match &entry.state {
             DeviceState::InActive => Err(anyhow::anyhow!("Already disconnected")),
-            DeviceState::Active(id, _) => {
+            DeviceState::Active(id, _, _) => {
                 if id == connection_id {
                     entry.state = DeviceState::InActive;
                     if let Err(err) = self.sender.try_send(PayloadType::ConnectionPayload(
@@ -133,7 +147,7 @@ impl DeviceManager {
             .ok_or(anyhow::anyhow!("No device with given id"))?;
         match &device.state {
             DeviceState::InActive => Err(anyhow::anyhow!("Device not connected?")),
-            DeviceState::Active(_, sender) => {
+            DeviceState::Active(_, _, sender) => {
                 let value = serde_json::to_value(PairPayloadBody { pair })?;
                 sender.try_send(Payload::generate_new("kdeconnect.pair", value))?;
                 device.device.paired = pair;
@@ -176,7 +190,7 @@ pub struct Device {
 #[derive(Clone)]
 pub enum DeviceState {
     InActive,
-    Active(uuid::Uuid, Sender<Payload>),
+    Active(uuid::Uuid, SocketAddr, Sender<Payload>),
 }
 
 impl DeviceState {

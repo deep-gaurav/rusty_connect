@@ -17,6 +17,7 @@ type BatteryPayload {
 
 type BatteryState {
   lastStatus: BatteryPayload
+  lastSentStatus: BatteryPayload
 }
 
 type Batttery {
@@ -84,6 +85,32 @@ type Mutation {
   pair(id: String!, pair: Boolean!): DeviceWithState!
 }
 
+type Notification {
+  sendNotification: String!
+}
+
+type NotificationConfig {
+  enabled: Boolean!
+}
+
+type NotificationPayload {
+  id: String!
+  appName: String
+  ticker: String
+  isClearable: Boolean
+  isCancel: Boolean
+  title: String
+  text: String
+  requestReplyId: String
+  silent: Boolean
+  payloadHash: String
+  iconPath: String
+}
+
+type NotificationState {
+  enabled: Boolean!
+}
+
 type PairPayloadBody {
   pair: Boolean!
 }
@@ -115,18 +142,21 @@ type PluginConfigs {
   ping: PingConfig
   clipboard: ClipboardConfig
   batttery: BatteryConfig
+  notification: NotificationConfig
 }
 
 type PluginManager {
   ping: Ping!
   clipboard: Clipboard!
   batttery: Batttery!
+  notification: Notification!
 }
 
 type PluginStates {
   ping: PingState!
   clipboard: ClipboardState!
   batttery: BatteryState!
+  notification: NotificationState!
 }
 
 type Query {
@@ -148,6 +178,7 @@ union ReceivedPayload =
   | PingPayload
   | ClipboardPayload
   | BatteryPayload
+  | NotificationPayload
   | Payload
 
 type Subscription {

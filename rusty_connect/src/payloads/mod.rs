@@ -21,6 +21,16 @@ pub struct Payload {
     pub id: u128,
     pub r#type: String,
     pub body: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payload_size: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payload_transfer_info: Option<PayloadTransferInfo>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PayloadTransferInfo {
+    pub port: u16,
 }
 
 impl Payload {
@@ -29,6 +39,8 @@ impl Payload {
             id: get_timestamp(),
             r#type: payload_type.to_string(),
             body: value,
+            payload_size: None,
+            payload_transfer_info: None,
         }
     }
 }

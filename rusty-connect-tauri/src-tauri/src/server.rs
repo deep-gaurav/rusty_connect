@@ -23,9 +23,6 @@ pub async fn run_server(apphandle: &AppHandle, port: u32) -> anyhow::Result<()> 
         return Err(anyhow::anyhow!("Local app dir not directory"));
     }
     let config_path = local_app_dir.join("conf.json");
-    let cert_path = local_app_dir.join("cert");
-    let key_path = local_app_dir.join("key");
-    let device_config_path = local_app_dir.join("devices");
     let config = {
         let data = tokio::fs::read(&config_path)
             .await
@@ -57,9 +54,7 @@ pub async fn run_server(apphandle: &AppHandle, port: u32) -> anyhow::Result<()> 
         &config.device_id,
         &config.device_name,
         &config.device_type,
-        cert_path,
-        key_path,
-        &device_config_path,
+        &local_app_dir,
     )
     .await?;
     rusty.run(port).await?;

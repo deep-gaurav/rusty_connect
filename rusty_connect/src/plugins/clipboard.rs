@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use async_graphql::{Context, Object, SimpleObject};
 use serde::{Deserialize, Serialize};
 
@@ -31,6 +33,10 @@ impl Plugin for Clipboard {
     type PluginConfig = ClipboardConfig;
     type PluginState = ClipboardState;
 
+    fn init(device_mangager: &crate::devices::DeviceManager) -> Self {
+        Self
+    }
+
     fn incoming_capabilities(&self) -> Vec<String> {
         vec![
             "kdeconnect.clipboard".to_string(),
@@ -45,10 +51,10 @@ impl Plugin for Clipboard {
         ]
     }
 
-    fn parse_payload(
+    async fn parse_payload(
         &self,
         payload: &crate::payloads::Payload,
-        state: &mut Self::PluginState,
+        address: SocketAddr,
     ) -> Option<Self::PluginPayload> {
         if payload.r#type == "kdeconnect.clipboard" {
             let payload = serde_json::from_value::<Self::PluginPayload>(payload.body.clone());

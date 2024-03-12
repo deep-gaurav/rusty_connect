@@ -12,7 +12,9 @@ use tauri::{api::notification::Notification, AppHandle, Manager};
 use tracing::{debug, info, warn};
 
 use crate::{
-    plugins::battery::send_batery, state::Devices, system_tray::generate_system_tray_menu,
+    plugins::battery::send_batery,
+    state::{Devices, NotificationState},
+    system_tray::generate_system_tray_menu,
 };
 
 pub async fn listen_to_server(
@@ -102,6 +104,7 @@ pub async fn listen_to_server(
                                 app.state::<Devices>().devices.read().await.iter().find(|d|d.device.id == device_id).cloned()
                             };
                             if let Some(device) = device {
+                                info!("Received ping");
                                 if let Err(err)=  Notification::new(&app.config().tauri.bundle.identifier).title(format!("Ping Received from {}", device.device.identity.device_name)).body(format!("Pinged message {payload:?}")).show(){
                                     warn!("Notification send error {err:?}")
                                 }
@@ -119,7 +122,49 @@ pub async fn listen_to_server(
                         info!("Received battery update {data:?}");
                         refresh_devices(&request_client, app.clone(), port);
                     }
-                    connection_subscription::RecievedPayloadFields::Payload(_)=>{}
+                    connection_subscription::RecievedPayloadFields::NotificationPayload(data) => {
+                        if let Some(title) =&data.title{
+                            if data.silent == Some(true) {
+                                continue;
+                            }
+                            let state = app.state::<NotificationState>();
+
+                            if data.is_cancel == Some(true) {
+                                let mut notifs = state.notifications.write().await;
+                                if let Some(notif) = notifs.remove(&data.id){
+                                    #[cfg(target_os = "linux")]
+                                    {
+
+                                        notif.close();
+                                    }
+                                }
+                                continue;
+                            }
+                            
+
+                            //Update notification is it can
+                            let mut notification = Notification::new(&app.config().tauri.bundle.identifier).title(title);
+                            if let Some(body) = data.text{
+                                notification = notification.body(body);
+                            }
+                            if let Some(icon) = data.icon_path{
+                                notification = notification.icon(icon);
+                            }
+                            
+                            match notification.show() {
+                                Ok(_)=>{
+                                    info!("Showed notification");
+                                }
+                                Err(err)=>{
+                                    warn!("Cant show notification")
+                                }
+                            }
+
+                        }
+                    }
+                    connection_subscription::RecievedPayloadFields::Payload(data)=>{
+                        info!("Received unknown payload {data:#?}")
+                    }
                 }
             }
         }

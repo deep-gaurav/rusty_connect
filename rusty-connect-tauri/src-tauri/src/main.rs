@@ -1,13 +1,13 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::error::Error;
+use std::{collections::HashMap, error::Error};
 
 use api::{BroadcastUdp, Pair};
 use gql_subscription::listen_to_server;
 use once_cell::sync::{Lazy, OnceCell};
 use server::run_server;
-use state::Devices;
+use state::{Devices, NotificationState};
 use system_tray::generate_system_tray_menu;
 use tauri::{
     App, AppHandle, CustomMenuItem, Manager, RunEvent, SystemTray, SystemTrayEvent, SystemTrayMenu,
@@ -107,6 +107,9 @@ fn main() {
     tauri::Builder::default()
         .manage(Devices {
             devices: RwLock::new(Vec::new()),
+        })
+        .manage(NotificationState {
+            notifications: RwLock::new(HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
             refresh_devices,

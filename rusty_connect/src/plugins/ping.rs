@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use async_graphql::{Object, SimpleObject};
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -19,6 +21,10 @@ impl Plugin for Ping {
     type PluginConfig = PingConfig;
     type PluginState = PingState;
 
+    fn init(device_mangager: &crate::devices::DeviceManager) -> Self {
+        Self
+    }
+
     fn incoming_capabilities(&self) -> Vec<String> {
         vec!["kdeconnect.ping".to_string()]
     }
@@ -27,10 +33,10 @@ impl Plugin for Ping {
         vec!["kdeconnect.ping".to_string()]
     }
 
-    fn parse_payload(
+    async fn parse_payload(
         &self,
         payload: &crate::payloads::Payload,
-        _state: &mut Self::PluginState,
+        address: SocketAddr,
     ) -> Option<Self::PluginPayload> {
         if payload.r#type == "kdeconnect.ping" {
             let payload = serde_json::from_value::<Self::PluginPayload>(payload.body.clone());

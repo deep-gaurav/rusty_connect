@@ -35,15 +35,17 @@ impl Subscription {
             while let Ok(payload_type) = receiver.recv_async().await {
                 match payload_type {
                     PayloadType::Broadcast(payload) => {
-                        if let Ok(payload) = plugin_manager.parse_payload(payload, None){
+                        if let Ok(payload) = plugin_manager.parse_payload(payload, None).await{
                             yield ReceivedMessage { device_id:None, payload }
                         }
                     }
                     PayloadType::ConnectionPayload(device_id,payload) => {
-                        let mut dm =  device_manager.write().await;
-                        let device =  dm.devices.get_mut(&device_id);
-
-                        if let Some(device) = device {
+                        let device = {
+                            let dm = device_manager.read().await;
+                            let device =  dm.devices.get(&device_id);
+                            device.cloned()
+                        };
+                        if let Some(device) = &device {
 
                             match payload {
                                 crate::payloads::RustyPayload::Connected => yield ReceivedMessage {
@@ -63,7 +65,13 @@ impl Subscription {
                                     )
                                 },
                                 crate::payloads::RustyPayload::KDEConnectPayload(payload) => {
-                                    if let Ok(payload) = plugin_manager.parse_payload(payload,Some(&mut device.device)){
+                                    if let Ok(payload) = plugin_manager.parse_payload(payload,Some(device)).await{
+                                        {
+                                            let mut dm = device_manager.write().await;
+                                            if let Some(device) = dm.devices.get_mut(&device_id){
+                                                plugin_manager.update_state(&payload,device);
+                                            }
+                                        }
                                         yield ReceivedMessage { device_id:Some(device_id), payload }
                                     }
                                 },

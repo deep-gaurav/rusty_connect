@@ -32,54 +32,61 @@ pub mod plugins;
 pub mod schema;
 pub mod utils;
 
-pub struct RustyConnect<C: AsRef<Path>, K: AsRef<Path>> {
+pub struct RustyConnect {
     pub id: String,
     pub name: String,
     pub device_type: String,
-    pub cert_path: C,
-    pub key_path: K,
+    pub cert: Vec<u8>,
+    pub key: Vec<u8>,
     pub plugin_manager: Arc<PluginManager>,
     pub device_manager: Arc<RwLock<DeviceManager>>,
 }
 
-impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
+impl RustyConnect {
     pub async fn new(
         id: &str,
         name: &str,
         device_type: &str,
-        cert_path: C,
-        key_path: K,
-        device_config_path: &PathBuf,
+        data_folder: &Path,
     ) -> anyhow::Result<Self> {
+        tokio::fs::create_dir_all(data_folder).await?;
+        let cert_path = data_folder.join("cert");
+        let key_path = data_folder.join("key");
+        let certs = generate_cert(id, &cert_path, &key_path).await?;
+
         let (tx, rx) = flume::bounded(0);
-        let device_manager = DeviceManager::load_or_create(device_config_path, tx, rx).await?;
+        let device_manager =
+            DeviceManager::load_or_create(data_folder, tx, rx, certs.clone()).await?;
+        let plugin_manager = PluginManager::new(
+            id.to_string(),
+            name.to_string(),
+            device_type.to_string(),
+            &device_manager,
+        );
         Ok(Self {
             id: id.to_string(),
             name: name.to_string(),
             device_type: device_type.to_string(),
-            cert_path,
-            key_path,
-            plugin_manager: Arc::new(PluginManager::new(
-                id.to_string(),
-                name.to_string(),
-                device_type.to_string(),
-            )),
+            cert: certs.0,
+            key: certs.1,
+            plugin_manager: Arc::new(plugin_manager),
             device_manager: Arc::new(RwLock::new(device_manager)),
         })
     }
 
     pub async fn run(&mut self, gql_port: u32) -> anyhow::Result<()> {
         debug!("Starting RustyConnect on port 1716 and GQL on {gql_port}");
-        let certs = generate_cert(&self.id, &self.cert_path, &self.key_path).await?;
+        let certs = (self.cert.clone(), self.key.clone());
         let tcp_listener = TcpListener::bind("0.0.0.0:1716").await?;
         let tcp_fut = {
             // let certs = certs.clone();
             let device_manager = self.device_manager.clone();
             async move {
+                info!("Waiting for device");
                 loop {
                     match tcp_listener.accept().await {
                         Ok((mut socket, address)) => {
-                            debug!("Connected from address {address:?}");
+                            info!("Connected from address {address:?}");
                             let certs = certs.clone();
                             let device_manager = device_manager.clone();
 
@@ -150,7 +157,9 @@ impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
                                                     let device = {
                                                         let mut device_manager =
                                                             device_manager.write().await;
-                                                        device_manager.connected_to(identity).await
+                                                        device_manager
+                                                            .connected_to(address, identity)
+                                                            .await
                                                     };
                                                     match device {
                                                         Ok((tx, rx, connection_id)) => {
@@ -306,14 +315,24 @@ impl<C: AsRef<Path>, K: AsRef<Path>> RustyConnect<C, K> {
                 let data = &buf[..n];
                 data_buffer.extend_from_slice(data);
                 if let Some(position) = data_buffer.iter().position(|el| *el == b'\n') {
-                    if let Ok(payload) = serde_json::from_slice::<Payload>(&data_buffer[..position])
-                    {
-                        match tx.try_send(PayloadType::ConnectionPayload(
-                            device_id.to_string(),
-                            RustyPayload::KDEConnectPayload(payload),
-                        )) {
-                            Err(err) => warn!("Nothing to handle payload {err:?}"),
-                            Ok(_) => debug!("Sent payload to channel"),
+                    // if let Ok(payload) =
+                    //     serde_json::from_slice::<serde_json::Value>(&data_buffer[..position])
+                    // {
+                    //     info!("Received payload {payload:#?}");
+
+                    // }
+                    match serde_json::from_slice::<Payload>(&data_buffer[..position]) {
+                        Ok(payload) => {
+                            match tx.try_send(PayloadType::ConnectionPayload(
+                                device_id.to_string(),
+                                RustyPayload::KDEConnectPayload(payload),
+                            )) {
+                                Err(err) => warn!("Nothing to handle payload {err:?}"),
+                                Ok(_) => debug!("Sent payload to channel"),
+                            }
+                        }
+                        Err(err) => {
+                            warn!("parse failed {err:#?}")
                         }
                     }
                     data_buffer = Vec::from(&data_buffer[position + 1..]);

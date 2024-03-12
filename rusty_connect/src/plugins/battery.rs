@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use async_graphql::{Context, Enum, Object, SimpleObject};
 use serde::{Deserialize, Deserializer, Serialize};
 use tracing::info;
@@ -40,6 +42,10 @@ impl Plugin for Batttery {
     type PluginConfig = BatteryConfig;
     type PluginState = BatteryState;
 
+    fn init(device_mangager: &crate::devices::DeviceManager) -> Self {
+        Self
+    }
+
     fn incoming_capabilities(&self) -> Vec<String> {
         vec!["kdeconnect.battery".to_string()]
     }
@@ -48,19 +54,22 @@ impl Plugin for Batttery {
         vec!["kdeconnect.battery".to_string()]
     }
 
-    fn parse_payload(
+    async fn parse_payload(
         &self,
         payload: &crate::payloads::Payload,
-        state: &mut Self::PluginState,
+        address: SocketAddr,
     ) -> Option<Self::PluginPayload> {
         if payload.r#type == "kdeconnect.battery" {
             let payload = serde_json::from_value::<Self::PluginPayload>(payload.body.clone());
             if let Ok(payload) = payload {
-                state.last_status = Some(payload.clone());
                 return Some(payload);
             }
         }
         None
+    }
+
+    fn update_state(&self, payload: &Self::PluginPayload, state: &mut Self::PluginState) {
+        state.last_status = Some(payload.clone());
     }
 
     fn is_enabled(&self, config: &Option<Self::PluginConfig>) -> bool {
