@@ -44,7 +44,6 @@ jobs:
         run: python3 ../.github/update_cargo_toml.py
 
       - name: Rust cache
-        if: matrix.platform != 'ubuntu-latest'
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './rusty-connect-tauri -> target'
