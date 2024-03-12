@@ -4,15 +4,11 @@ use api::{
 use clipboard::{ClipboardContext, ClipboardProvider};
 use flume::Sender;
 use futures::StreamExt;
-use graphql_client::GraphQLQuery;
 
 use async_tungstenite::tungstenite::{client::IntoClientRequest, http::HeaderValue};
 use graphql_ws_client::graphql::StreamingOperation;
 use graphql_ws_client::Client;
-use tauri::{
-    api::notification::Notification, AppHandle, CustomMenuItem, Manager, SystemTrayMenu,
-    SystemTrayMenuItem, SystemTraySubmenu,
-};
+use tauri::{api::notification::Notification, AppHandle, Manager};
 use tracing::{debug, info, warn};
 
 use crate::{
