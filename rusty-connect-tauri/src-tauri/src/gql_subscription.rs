@@ -134,8 +134,6 @@ pub async fn listen_to_server(
                                 notifs.remove(&data.id);
                                 continue;
                             }
-                            
-
                             {
                                 let notifs = state.notifications.read().await;
                                 if let Some(notif) = notifs.get(&data.id){
@@ -144,14 +142,19 @@ pub async fn listen_to_server(
                                     }
                                 }
                             }
-                            let mut notification = Notification::new(&app.config().tauri.bundle.identifier).title(title);
+                            let title_with_app_name=
+                            if let Some(app_name) = data.app_name {
+                                format!("{title} ({app_name})")
+                            }else{
+                                title.clone()
+                            };
+                            let mut notification = Notification::new(&app.config().tauri.bundle.identifier).title(title_with_app_name);
                             if let Some(body) = &data.text{
                                 notification = notification.body(body);
                             }
                             if let Some(icon) = data.icon_path{
                                 notification = notification.icon(icon);
                             }
-                            
                             match notification.show() {
                                 Ok(_)=>{
                                     info!("Showed notification");

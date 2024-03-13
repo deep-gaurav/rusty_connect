@@ -17,4 +17,3 @@ pub fn Device(device: DeviceWithStateFields) -> impl IntoView {
         </div>
     }
 }
-

@@ -165,4 +165,3 @@ pub fn DeviceList(devices: ReadSignal<Vec<DeviceWithStateFields>>) -> impl IntoV
         </div>
     }
 }
-
