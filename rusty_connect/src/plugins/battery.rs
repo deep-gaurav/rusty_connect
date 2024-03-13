@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use async_graphql::{Context, Enum, Object, SimpleObject};
 use serde::{Deserialize, Deserializer, Serialize};
-use tracing::info;
+
 
 use crate::plugins::PluginExt;
 
@@ -42,7 +42,7 @@ impl Plugin for Batttery {
     type PluginConfig = BatteryConfig;
     type PluginState = BatteryState;
 
-    fn init(device_mangager: &crate::devices::DeviceManager) -> Self {
+    fn init(_device_mangager: &crate::devices::DeviceManager) -> Self {
         Self
     }
 
@@ -57,7 +57,7 @@ impl Plugin for Batttery {
     async fn parse_payload(
         &self,
         payload: &crate::payloads::Payload,
-        address: SocketAddr,
+        _address: SocketAddr,
     ) -> Option<Self::PluginPayload> {
         if payload.r#type == "kdeconnect.battery" {
             let payload = serde_json::from_value::<Self::PluginPayload>(payload.body.clone());

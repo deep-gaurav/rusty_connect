@@ -33,7 +33,7 @@ impl Plugin for Clipboard {
     type PluginConfig = ClipboardConfig;
     type PluginState = ClipboardState;
 
-    fn init(device_mangager: &crate::devices::DeviceManager) -> Self {
+    fn init(_device_mangager: &crate::devices::DeviceManager) -> Self {
         Self
     }
 
@@ -54,7 +54,7 @@ impl Plugin for Clipboard {
     async fn parse_payload(
         &self,
         payload: &crate::payloads::Payload,
-        address: SocketAddr,
+        _address: SocketAddr,
     ) -> Option<Self::PluginPayload> {
         if payload.r#type == "kdeconnect.clipboard" {
             let payload = serde_json::from_value::<Self::PluginPayload>(payload.body.clone());

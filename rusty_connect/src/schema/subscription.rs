@@ -8,7 +8,6 @@ use tracing::debug;
 
 use crate::{
     devices::DeviceManager,
-    payloads::PayloadType,
     plugins::{Connected, Disconnected, PluginManager, ReceivedPayload},
 };
 

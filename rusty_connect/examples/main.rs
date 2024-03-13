@@ -1,15 +1,11 @@
 use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-    sync::Arc,
+    path::{Path},
 };
 
 use rusty_connect::{
-    devices::DeviceManager,
-    plugins::{clipboard::Clipboard, ping::Ping, PluginManager},
     RustyConnect,
 };
-use tokio::sync::RwLock;
+
 use tracing::info;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 

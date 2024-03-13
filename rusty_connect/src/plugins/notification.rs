@@ -105,9 +105,9 @@ impl Plugin for Notification {
 
     fn should_send(
         &self,
-        config: &Option<Self::PluginConfig>,
-        state: &mut Self::PluginState,
-        payload: &Self::PluginPayload,
+        _config: &Option<Self::PluginConfig>,
+        _state: &mut Self::PluginState,
+        _payload: &Self::PluginPayload,
     ) -> bool {
         false
     }

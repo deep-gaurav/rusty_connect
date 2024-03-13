@@ -1,8 +1,8 @@
-use std::sync::Arc;
 
-use async_graphql::{Object, Schema};
 
-use crate::plugins::{clipboard::Clipboard, ping::Ping, PluginManager};
+use async_graphql::{Schema};
+
+
 
 use self::{mutation::Mutation, query::Query, subscription::Subscription};
 

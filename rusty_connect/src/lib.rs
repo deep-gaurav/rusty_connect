@@ -1,26 +1,25 @@
 use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
-use async_graphql_axum::{GraphQL, GraphQLRequest, GraphQLResponse, GraphQLSubscription};
-use axum::response::{Html, IntoResponse};
-use axum::Extension;
+use async_graphql_axum::{GraphQL, GraphQLSubscription};
+use axum::response::Html;
+
 use cert::certgen::generate_cert;
 use cert::CertPair;
 use devices::DeviceManager;
-use futures::future::Either;
-use futures::{StreamExt, TryStreamExt};
+
 use mdns_sd::ServiceInfo;
 use payloads::{PayloadType, RustyPayload};
 use plugins::PluginManager;
 use schema::subscription::Subscription;
 use schema::{mutation::Mutation, query::Query, GQSchema};
-use std::collections::HashMap;
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-use std::path::{Path, PathBuf};
+
+use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
-use tokio::stream;
+
 use tokio::sync::RwLock;
-use tokio_rustls::client::TlsStream;
+
 use tokio_rustls::rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, ServerName};
 use tokio_rustls::rustls::{ClientConfig, ServerConfig};
 use tokio_rustls::{TlsAcceptor, TlsConnector};
@@ -265,22 +264,20 @@ impl RustyConnect {
     async fn listen_to_broadcast(
         &self,
         kde_port: u16,
-        tx: flume::Sender<PayloadType>,
+        _tx: flume::Sender<PayloadType>,
     ) -> anyhow::Result<()> {
         let socket = UdpSocket::bind(format!("0.0.0.0:{kde_port}")).await?;
         socket.set_broadcast(true)?;
 
-        const SERVICE_NAME: &'static str = "_kdeconnect._udp.local.";
+        const SERVICE_NAME: &str = "_kdeconnect._udp.local.";
         let service_daemon = mdns_sd::ServiceDaemon::new()?;
         let receive = service_daemon.browse(SERVICE_NAME)?;
 
         let identity_body = self
             .plugin_manager
-            .get_identity_payload_body(Some(kde_port.into()));
+            .get_identity_payload_body(Some(kde_port));
 
-        let identity = self
-            .plugin_manager
-            .get_identity_payload(Some(kde_port.into()))?;
+        let identity = self.plugin_manager.get_identity_payload(Some(kde_port))?;
         let host_name = {
             let host_name = hostname::get()?;
             let host_name = host_name
@@ -341,7 +338,7 @@ impl RustyConnect {
                             }
                         }
                     }
-                    other_event => {
+                    _other_event => {
                         // info!("Received other service event {other_event:?}")
                     }
                 }
@@ -499,7 +496,7 @@ impl RustyConnect {
         let value = serde_json::to_value(identity.clone())?;
         let identity_payload = Payload::generate_new("kdeconnect.identity", value);
         let idenity_bytes = serde_json::to_vec(&identity_payload)?;
-        let sent = stream.write(&idenity_bytes).await?;
+        let _sent = stream.write(&idenity_bytes).await?;
         stream.write_all(&[b'\n']).await?;
         stream.flush().await?;
 
