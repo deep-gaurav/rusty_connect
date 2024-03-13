@@ -10,10 +10,7 @@ pub enum RustyPayload {
     KDEConnectPayload(Payload),
 }
 
-pub enum PayloadType {
-    Broadcast(Payload),
-    ConnectionPayload(String, RustyPayload),
-}
+pub type PayloadType = (String, RustyPayload);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -69,7 +66,7 @@ pub struct IdentityPayloadBody {
     pub incoming_capabilities: Vec<String>,
     pub outgoing_capabilities: Vec<String>,
     pub protocol_version: u32,
-    pub tcp_port: Option<u32>,
+    pub tcp_port: Option<u16>,
 }
 
 #[derive(Debug, Serialize, Deserialize, SimpleObject, Clone)]

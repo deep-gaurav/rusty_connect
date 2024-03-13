@@ -90,10 +90,7 @@ impl DeviceManager {
         let (tx, rx) = flume::bounded(0);
         let id = uuid::Uuid::new_v4();
         *state = DeviceState::Active(id, address, tx);
-        if let Err(err) = self.sender.try_send(PayloadType::ConnectionPayload(
-            device_id,
-            RustyPayload::Connected,
-        )) {
+        if let Err(err) = self.sender.try_send((device_id, RustyPayload::Connected)) {
             debug!("Error sending connected message {err:?}");
         }
         self.save().await?;
@@ -126,10 +123,10 @@ impl DeviceManager {
             DeviceState::Active(id, _, _) => {
                 if id == connection_id {
                     entry.state = DeviceState::InActive;
-                    if let Err(err) = self.sender.try_send(PayloadType::ConnectionPayload(
-                        device_id.to_string(),
-                        RustyPayload::Disconnect,
-                    )) {
+                    if let Err(err) = self
+                        .sender
+                        .try_send((device_id.to_string(), RustyPayload::Disconnect))
+                    {
                         debug!("Error sending disconnected message {err:?}");
                     }
                     Ok(())

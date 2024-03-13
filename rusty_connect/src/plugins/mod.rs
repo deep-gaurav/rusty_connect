@@ -280,13 +280,13 @@ macro_rules! register_plugins {
 }
 
 impl PluginManager {
-    pub fn get_identity_payload(&self, port: Option<u32>) -> anyhow::Result<Payload> {
+    pub fn get_identity_payload(&self, port: Option<u16>) -> anyhow::Result<Payload> {
         let value = serde_json::to_value(self.get_identity_payload_body(port))
             .map_err(|e| anyhow::anyhow!("{e:?}"))?;
         Ok(Payload::generate_new("kdeconnect.identity", value))
     }
 
-    pub fn get_identity_payload_body(&self, port: Option<u32>) -> IdentityPayloadBody {
+    pub fn get_identity_payload_body(&self, port: Option<u16>) -> IdentityPayloadBody {
         IdentityPayloadBody {
             device_id: self.device_id.clone(),
             device_name: self.device_name.clone(),

@@ -32,57 +32,50 @@ impl Subscription {
 
         let stream = stream! {
             debug!("Listening for new payload from channel");
-            while let Ok(payload_type) = receiver.recv_async().await {
+            while let Ok((device_id,payload)) = receiver.recv_async().await {
                 debug!("Received payload from channel");
-                match payload_type {
-                    PayloadType::Broadcast(payload) => {
-                        if let Ok(payload) = plugin_manager.parse_payload(payload, None).await{
-                            yield ReceivedMessage { device_id:None, payload }
-                        }
-                    }
-                    PayloadType::ConnectionPayload(device_id,payload) => {
-                        let device = {
-                            let dm = device_manager.read().await;
-                            let device =  dm.devices.get(&device_id);
-                            device.cloned()
-                        };
-                        if let Some(device) = &device {
 
-                            match payload {
-                                crate::payloads::RustyPayload::Connected => yield ReceivedMessage {
-                                    device_id:Some(device_id.clone()),
-                                    payload:ReceivedPayload::Connected(
-                                        Connected{
-                                            id:device_id
-                                        }
-                                    )
-                                },
-                                crate::payloads::RustyPayload::Disconnect => yield ReceivedMessage {
-                                    device_id:Some(device_id.clone()),
-                                    payload:ReceivedPayload::Disconnected(
-                                        Disconnected{
-                                            id:device_id
-                                        }
-                                    )
-                                },
-                                crate::payloads::RustyPayload::KDEConnectPayload(payload) => {
-                                    debug!("parsing payload");
-                                    if let Ok(payload) = plugin_manager.parse_payload(payload,Some(device)).await{
-                                        debug!("parsed payload");
-                                        {
-                                            let mut dm = device_manager.write().await;
-                                            if let Some(device) = dm.devices.get_mut(&device_id){
-                                                plugin_manager.update_state(&payload,device);
-                                            }
-                                        }
-                                        debug!("emitting payload");
-                                        yield ReceivedMessage { device_id:Some(device_id), payload }
+                let device = {
+                    let dm = device_manager.read().await;
+                    let device =  dm.devices.get(&device_id);
+                    device.cloned()
+                };
+                if let Some(device) = &device {
+
+                    match payload {
+                        crate::payloads::RustyPayload::Connected => yield ReceivedMessage {
+                            device_id:device_id.clone(),
+                            payload:ReceivedPayload::Connected(
+                                Connected{
+                                    id:device_id
+                                }
+                            )
+                        },
+                        crate::payloads::RustyPayload::Disconnect => yield ReceivedMessage {
+                            device_id:device_id.clone(),
+                            payload:ReceivedPayload::Disconnected(
+                                Disconnected{
+                                    id:device_id
+                                }
+                            )
+                        },
+                        crate::payloads::RustyPayload::KDEConnectPayload(payload) => {
+                            debug!("parsing payload");
+                            if let Ok(payload) = plugin_manager.parse_payload(payload,Some(device)).await{
+                                debug!("parsed payload");
+                                {
+                                    let mut dm = device_manager.write().await;
+                                    if let Some(device) = dm.devices.get_mut(&device_id){
+                                        plugin_manager.update_state(&payload,device);
                                     }
-                                },
+                                }
+                                debug!("emitting payload");
+                                yield ReceivedMessage { device_id, payload }
                             }
-                        }
+                        },
                     }
                 }
+
             }
             debug!("Stopped listening for payload")
         };
@@ -92,6 +85,6 @@ impl Subscription {
 
 #[derive(SimpleObject)]
 pub struct ReceivedMessage {
-    pub device_id: Option<String>,
+    pub device_id: String,
     pub payload: ReceivedPayload,
 }

@@ -166,7 +166,7 @@ type Query {
 }
 
 type ReceivedMessage {
-  deviceId: String
+  deviceId: String!
   payload: ReceivedPayload!
 }
 

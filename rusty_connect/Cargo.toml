@@ -27,6 +27,8 @@ async-graphql-axum = "7.0.2"
 axum = "0.7.4"
 async-stream = "0.3.5"
 uuid = { version = "1.7.0", features = ["v4"] }
+mdns-sd = { version = "0.10" }
+hostname = "^0.3"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

@@ -84,23 +84,20 @@ pub async fn listen_to_server(
                         refresh_devices(&request_client, app.clone(), port);
                     },
                     connection_subscription::ConnectionSubscriptionPayloadsPayload::IdentityPayloadBody(_) => {
-                        if data.payloads.device_id.is_none() {
-                            refresh_devices(&request_client, app.clone(), port);
-                        }
+                        refresh_devices(&request_client, app.clone(), port);
                     },
                     connection_subscription::ConnectionSubscriptionPayloadsPayload::PairPayloadBody(_) => {
-                        if let Some(device_id) = data.payloads.device_id {
                             if let Err(err) =  (API{
-                                event:api::KDEEvents::PairRequest(device_id),
+                                event:api::KDEEvents::PairRequest(data.payloads.device_id),
                                 ..Default::default()
                             }).emit(app,APIEmit::Event) {
                                 debug!("Cant send pair request event {err:?}")
                             }
-                        }
+                        
                     },
                     connection_subscription::ConnectionSubscriptionPayloadsPayload::PingPayload(payload) => {
-                        if let Some(device_id) = data.payloads.device_id{
-                            let device = {
+                        let device_id = data.payloads.device_id;
+                        let device = {
                                 app.state::<Devices>().devices.read().await.iter().find(|d|d.device.id == device_id).cloned()
                             };
                             if let Some(device) = device {
@@ -109,7 +106,7 @@ pub async fn listen_to_server(
                                     warn!("Notification send error {err:?}")
                                 }
                             }
-                        }
+                        
                     },
                     connection_subscription::ConnectionSubscriptionPayloadsPayload::ClipboardPayload(data) => {
                         info!("Copying {data:?} to clipboard");

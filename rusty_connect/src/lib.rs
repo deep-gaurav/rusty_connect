@@ -3,7 +3,11 @@ use async_graphql_axum::{GraphQL, GraphQLRequest, GraphQLResponse, GraphQLSubscr
 use axum::response::{Html, IntoResponse};
 use axum::Extension;
 use cert::certgen::generate_cert;
+use cert::CertPair;
 use devices::DeviceManager;
+use futures::future::Either;
+use futures::{StreamExt, TryStreamExt};
+use mdns_sd::ServiceInfo;
 use payloads::{PayloadType, RustyPayload};
 use plugins::PluginManager;
 use schema::subscription::Subscription;
@@ -14,11 +18,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
+use tokio::stream;
 use tokio::sync::RwLock;
 use tokio_rustls::client::TlsStream;
 use tokio_rustls::rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, ServerName};
-use tokio_rustls::rustls::ClientConfig;
-use tokio_rustls::TlsConnector;
+use tokio_rustls::rustls::{ClientConfig, ServerConfig};
+use tokio_rustls::{TlsAcceptor, TlsConnector};
 
 use tracing::{debug, error, info, warn};
 
@@ -165,7 +170,7 @@ impl RustyConnect {
                                                         Ok((tx, rx, connection_id)) => {
                                                             if let Err(err) =
                                                                 Self::handle_tls_stream(
-                                                                    tls_stream,
+                                                                    tls_stream.into(),
                                                                     address,
                                                                     device_id.clone(),
                                                                     tx,
@@ -263,29 +268,162 @@ impl RustyConnect {
         tx: flume::Sender<PayloadType>,
     ) -> anyhow::Result<()> {
         let socket = UdpSocket::bind(format!("0.0.0.0:{kde_port}")).await?;
+        socket.set_broadcast(true)?;
 
-        let mut buf = vec![0u8; 4096];
-        let mut data_buffer = vec![];
-        info!("Waiting from broadcast");
-        while let Ok(n) = socket.recv_buf(&mut buf).await {
-            let data = &buf[..n];
-            data_buffer.extend_from_slice(data);
-            if let Some(position) = data_buffer.iter().position(|el| *el == b'\n') {
-                if let Ok(payload) = serde_json::from_slice::<Payload>(&data_buffer[..position]) {
-                    info!("Received broadcast payload");
-                    match tx.try_send(PayloadType::Broadcast(payload)) {
-                        Err(err) => warn!("Nothing to handle payload {err:?}"),
-                        Ok(_) => debug!("Sent payload to channel"),
+        const SERVICE_NAME: &'static str = "_kdeconnect._udp.local.";
+        let service_daemon = mdns_sd::ServiceDaemon::new()?;
+        let receive = service_daemon.browse(SERVICE_NAME)?;
+
+        let identity_body = self
+            .plugin_manager
+            .get_identity_payload_body(Some(kde_port.into()));
+
+        let identity = self
+            .plugin_manager
+            .get_identity_payload(Some(kde_port.into()))?;
+        let host_name = {
+            let host_name = hostname::get()?;
+            let host_name = host_name
+                .to_str()
+                .ok_or(anyhow::anyhow!("Host name not valid"))?;
+            if host_name.ends_with('.') {
+                host_name.to_string()
+            } else if host_name.ends_with(".local") {
+                format!("{host_name}.")
+            } else {
+                format!("{host_name}.local.")
+            }
+        };
+
+        let service_info = ServiceInfo::new(
+            SERVICE_NAME,
+            &identity_body.device_id,
+            &host_name,
+            "192.168.53.117",
+            1716,
+            [
+                ("id", identity_body.device_id.clone()),
+                ("name", identity_body.device_name.clone()),
+                ("type", identity_body.device_type.clone()),
+                ("protocol", identity_body.protocol_version.to_string()),
+            ]
+            .as_slice(),
+        )?;
+        service_daemon.register(service_info)?;
+
+        tokio::spawn(async move {
+            info!("Waiting for mdns");
+            while let Ok(event) = receive.recv_async().await {
+                match event {
+                    mdns_sd::ServiceEvent::ServiceResolved(info) => {
+                        info!("Service info {info:#?}");
+                        let port = info.get_port();
+                        let address = info.get_addresses_v4().into_iter().next();
+                        if let Some(address) = address {
+                            let Ok(udpsock) = UdpSocket::bind("0.0.0.0:0").await else {
+                                continue;
+                            };
+                            if let Err(err) = udpsock.set_broadcast(true) {
+                                warn!("cant set udp broadcast {err:?}");
+                                continue;
+                            };
+
+                            let Ok(mut payload_bytes) = serde_json::to_vec(&identity) else {
+                                continue;
+                            };
+                            payload_bytes.append(&mut b"\n".to_vec());
+                            let advertise_addr =
+                                SocketAddr::new(std::net::IpAddr::V4(*address), port);
+                            info!("Sending info to socket addr {advertise_addr:?}");
+                            if let Err(err) = udpsock.send_to(&payload_bytes, advertise_addr).await
+                            {
+                                warn!("Cant send to mdns user {err:?}");
+                            }
+                        }
+                    }
+                    other_event => {
+                        // info!("Received other service event {other_event:?}")
                     }
                 }
-                data_buffer = Vec::from(&data_buffer[position + 1..]);
             }
+            info!("Exited mdns")
+        });
+        let mut buf = Vec::with_capacity(1024 * 512);
+        info!("Waiting from broadcast");
+        let device_id = self.plugin_manager.device_id.clone();
+        while let Ok((n, address)) = socket.recv_buf_from(&mut buf).await {
+            info!("Receiving from udp {n}");
+            let data = &buf[..n];
+            info!("Received udp from {address:?}");
+            if let Ok(payload) = serde_json::from_slice::<Payload>(data) {
+                let identity = serde_json::from_value::<IdentityPayloadBody>(payload.body.clone());
+                if let Ok(identity) = identity {
+                    if identity.device_id != device_id {
+                        if let Some(port) = identity.tcp_port {
+                            let self_identity = self
+                                .plugin_manager
+                                .get_identity_payload_body(Some(kde_port));
+                            let certs = (self.cert.clone(), self.key.clone());
+                            let device_id = identity.device_id.clone();
+                            let device = {
+                                let mut device_manager = self.device_manager.write().await;
+                                device_manager.connected_to(address, identity).await
+                            };
+                            match device {
+                                Ok((tx, rx, connection_id)) => {
+                                    let dm = self.device_manager.clone();
+                                    tokio::spawn(async move {
+                                        if let Err(err) = Self::connect_to(
+                                            address,
+                                            port,
+                                            self_identity,
+                                            certs,
+                                            device_id.clone(),
+                                            tx,
+                                            rx,
+                                        )
+                                        .await
+                                        {
+                                            warn!("Error running tls stream {err:?}")
+                                        };
+
+                                        {
+                                            info!("Disconnecting device {device_id}");
+                                            let mut device_manager = dm.write().await;
+                                            if let Err(err) = device_manager
+                                                .disconnect(&device_id, &connection_id)
+                                            {
+                                                warn!("Error disconnecting {err:?}")
+                                            }
+                                            info!("Disconnected device {device_id}");
+                                        }
+                                    });
+                                }
+                                Err(e) => {
+                                    warn!("Cannot connect to device {e:?}")
+                                }
+                            }
+                        }
+                    } else {
+                        info!("Ignoring self discovery")
+                    }
+                } else {
+                    info!("Non identity payload not supported")
+                }
+            } else {
+                match std::str::from_utf8(data) {
+                    Ok(data) => warn!("{data}"),
+                    Err(err) => warn!("{err:?}"),
+                }
+                warn!("Not valid payload")
+            }
+            buf.clear();
         }
         Ok(())
     }
 
     pub async fn handle_tls_stream(
-        tls_stream: TlsStream<TcpStream>,
+        tls_stream: tokio_rustls::TlsStream<TcpStream>,
         _address: SocketAddr,
         device_id: String,
         tx: flume::Sender<PayloadType>,
@@ -323,7 +461,7 @@ impl RustyConnect {
                     // }
                     match serde_json::from_slice::<Payload>(&data_buffer[..position]) {
                         Ok(payload) => {
-                            match tx.try_send(PayloadType::ConnectionPayload(
+                            match tx.try_send((
                                 device_id.to_string(),
                                 RustyPayload::KDEConnectPayload(payload),
                             )) {
@@ -343,6 +481,51 @@ impl RustyConnect {
 
         tokio::pin!(out_sender, out_receiver);
         futures::future::select(out_sender, out_receiver).await;
+        Ok(())
+    }
+
+    async fn connect_to(
+        address: SocketAddr,
+        port: u16,
+        identity: IdentityPayloadBody,
+        certs: CertPair,
+
+        device_id: String,
+        tx: flume::Sender<PayloadType>,
+        rx: flume::Receiver<Payload>,
+    ) -> anyhow::Result<()> {
+        let mut stream = TcpStream::connect(SocketAddr::new(address.ip(), port)).await?;
+
+        let value = serde_json::to_value(identity.clone())?;
+        let identity_payload = Payload::generate_new("kdeconnect.identity", value);
+        let idenity_bytes = serde_json::to_vec(&identity_payload)?;
+        let sent = stream.write(&idenity_bytes).await?;
+        stream.write_all(&[b'\n']).await?;
+        stream.flush().await?;
+
+        let config = ServerConfig::builder();
+        let (cert, key) = certs;
+        let config = config
+            .with_client_cert_verifier(Arc::new(NoVerifier))
+            .with_single_cert_with_ocsp(
+                vec![cert.into()],
+                PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key)),
+                vec![],
+            )?;
+        let tls_connector = TlsAcceptor::from(Arc::new(config));
+
+        info!("Upgrading to TLS Stream as server");
+        let tls_stream = tls_connector.accept(stream).await;
+        let tls_stream = match tls_stream {
+            Ok(stream) => stream,
+            Err(err) => {
+                warn!("couldnt upgrade tls {err:?}");
+                return Err(err.into());
+            }
+        };
+        info!("Upgraded to TLS Stream");
+
+        Self::handle_tls_stream(tls_stream.into(), address, device_id, tx, rx).await?;
         Ok(())
     }
 }
