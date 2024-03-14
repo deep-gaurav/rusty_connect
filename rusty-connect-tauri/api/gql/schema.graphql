@@ -122,7 +122,7 @@ type Payload {
 }
 
 type Ping {
-  sendPing: String!
+  sendPing(deviceId: String): String!
 }
 
 type PingConfig {

@@ -7,14 +7,16 @@ use leptos::{
     ReadSignal, SignalGetUntracked,
 };
 use leptos::{For, SignalGet};
+use leptos_router::Outlet;
 use log::info;
 use wasm_bindgen::JsValue;
 
-use crate::device::Device;
+use crate::device::DeviceTile;
 use crate::invoke::{invoke, pair, refresh_devices};
 
 #[component]
 pub fn DeviceList(devices: ReadSignal<Vec<DeviceWithStateFields>>) -> impl IntoView {
+    info!("Rendering DeviceList");
     let non_paired_devices = create_memo(move |_| {
         devices
             .get()
@@ -51,7 +53,7 @@ pub fn DeviceList(devices: ReadSignal<Vec<DeviceWithStateFields>>) -> impl IntoV
         info!("Devices updated");
     });
     view! {
-        <div>
+        <div class="h-full w-full">
 
             <dialog
                 _ref=pairing_dialog_ref
@@ -69,7 +71,7 @@ pub fn DeviceList(devices: ReadSignal<Vec<DeviceWithStateFields>>) -> impl IntoV
                         if let Some(device) = device {
                             let device_id1 = device_id.clone();
                             view! {
-                                <Device device=device/>
+                                <DeviceTile device=device/>
 
                                 <div class="flex mt-2">
                                     <div class="flex-grow"></div>
@@ -121,47 +123,60 @@ pub fn DeviceList(devices: ReadSignal<Vec<DeviceWithStateFields>>) -> impl IntoV
                 }}
 
             </dialog>
-            <div class="flex mb-2">
-                <h2 class="font-bold text-2xl flex-grow">"Devices"</h2>
-                <button
-                    on:click=move |_ev| {
-                        wasm_bindgen_futures::spawn_local(async move {
-                            refresh_devices().await;
-                        })
-                    }
+            <div class="flex h-full w-full">
+                <div>
+                    <div class="flex mb-2">
+                        <h2 class="font-bold text-2xl flex-grow">"Devices"</h2>
+                        <button
+                            on:click=move |_ev| {
+                                wasm_bindgen_futures::spawn_local(async move {
+                                    refresh_devices().await;
+                                })
+                            }
 
-                    class="bg-purple-300 rounded-md p-2 hover:shadow-md transition-all"
-                >
-                    Refresh
-                </button>
+                            class="bg-purple-300 dark:bg-purple-900 rounded-md p-2 hover:shadow-md transition-all"
+                        >
+                            Refresh
+                        </button>
+                    </div>
+                    <hr/>
+                    <h2 class="font-medium text-lg mt-2">
+                        "Paired Devices" " (" {move || remembered_devices.get().len()} ")"
+                    </h2>
+                    <For
+                        each=move || remembered_devices.get()
+                        key=|device| {
+                            format!(
+                                "{}{}{}",
+                                device.device.id,
+                                device.is_connected,
+                                device.device.paired,
+                            )
+                        }
+
+                        children=move |device| {
+                            view! { <DeviceTile device=device/> }
+                        }
+                    />
+
+                    <hr/>
+                    <h2 class="font-medium text-lg mt-2">
+                        "Available Devices" " (" {move || non_paired_devices.get().len()} ")"
+                    </h2>
+                    <For
+                        each=move || non_paired_devices.get()
+                        key=|device| device.device.id.clone()
+                        children=move |device| {
+                            view! { <DeviceTile device=device/> }
+                        }
+                    />
+
+                </div>
+                <div class="w-4"></div>
+                <Outlet/>
             </div>
-            <hr/>
-            <h2 class="font-medium text-lg mt-2">
-                "Paired Devices" " (" {move || remembered_devices.get().len()} ")"
-            </h2>
-            <For
-                each=move || remembered_devices.get()
-                key=|device| {
-                    format!("{}{}{}", device.device.id, device.is_connected, device.device.paired)
-                }
-
-                children=move |device| {
-                    view! { <Device device=device/> }
-                }
-            />
-
-            <hr/>
-            <h2 class="font-medium text-lg mt-2">
-                "Available Devices" " (" {move || non_paired_devices.get().len()} ")"
-            </h2>
-            <For
-                each=move || non_paired_devices.get()
-                key=|device| device.device.id.clone()
-                children=move |device| {
-                    view! { <Device device=device/> }
-                }
-            />
 
         </div>
     }
 }
+

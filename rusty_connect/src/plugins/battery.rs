@@ -3,7 +3,6 @@ use std::net::SocketAddr;
 use async_graphql::{Context, Enum, Object, SimpleObject};
 use serde::{Deserialize, Deserializer, Serialize};
 
-
 use crate::plugins::PluginExt;
 
 use super::Plugin;

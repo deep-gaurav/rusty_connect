@@ -7,7 +7,7 @@ use serde_wasm_bindgen::to_value;
 use wasm_bindgen::prelude::*;
 
 use crate::{
-    device::Device,
+    device::{DevicePage, DeviceTile},
     device_list::DeviceList,
     invoke::{invoke, refresh_devices},
 };
@@ -16,6 +16,7 @@ use crate::{
 pub fn App() -> impl IntoView {
     let (devices, set_devices) = API::use_devices(vec![]);
 
+    provide_context(devices);
     create_effect(|_| {
         wasm_bindgen_futures::spawn_local(async move {
             refresh_devices().await;
@@ -23,18 +24,52 @@ pub fn App() -> impl IntoView {
     });
 
     view! {
-        <main class="bg-slate-50 dark:bg-gray-950 h-full p-4 dark:text-slate-200">
+        <main class="bg-slate-50 dark:bg-gray-950 h-full p-4 dark:text-slate-400">
             <Router>
                 <Routes>
                     <Route
-                        path="/"
+                        path=""
                         view=move || {
                             view! { <DeviceList devices=devices/> }
                         }
-                    />
+                    >
 
+                        <Route path=":id" view=DevicePage/>
+                        <Route
+                            path=""
+                            view=move || {
+                                view! {}
+                            }
+                        />
+
+                    </Route>
                 </Routes>
             </Router>
         </main>
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

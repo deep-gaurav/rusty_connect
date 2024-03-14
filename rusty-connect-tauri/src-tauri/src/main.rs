@@ -17,7 +17,7 @@ use tokio::sync::RwLock;
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use plugins::clipboard::send_clipboard;
+use plugins::{clipboard::send_clipboard, ping::send_ping};
 
 pub mod gql_subscription;
 pub mod plugins;
@@ -114,7 +114,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             refresh_devices,
             pair,
-            send_clipboard
+            send_clipboard,
+            send_ping,
         ])
         .setup(setup)
         .system_tray(tray)

@@ -68,3 +68,11 @@ pub struct SendClipboard;
     response_derives = "Debug"
 )]
 pub struct SendBattery;
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    query_path = "gql/queries.graphql",
+    schema_path = "gql/schema.graphql",
+    response_derives = "Debug"
+)]
+pub struct SendPing;

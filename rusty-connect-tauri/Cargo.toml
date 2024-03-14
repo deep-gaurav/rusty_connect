@@ -16,6 +16,4 @@ log = "0.4.21"
 console_log = "1.0.0"
 console_error_panic_hook = "0.1.7"
 leptos_router = { version = "0.6.9", features = ["csr"] }
-
-# [workspace]
-# members = ["api", "src-tauri"]
+enclose = "1.1.8"

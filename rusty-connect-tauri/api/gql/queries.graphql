@@ -45,6 +45,9 @@ fragment DeviceFields on Device {
       enabled
       sendEnabled
     }
+    notification{
+      enabled
+    }
   }
   pluginStates {
     batttery {
@@ -131,6 +134,14 @@ mutation SendBattery($charge:Float!, $isCharging:Boolean!, $deviceId: String){
   plugins{
     batttery{
       sendBatery(currentCharge:$charge, isCharging:$isCharging, deviceId:$deviceId)
+    }
+  }
+}
+
+mutation SendPing($deviceId: String) {
+  plugins{
+    ping{
+      sendPing(deviceId:$deviceId)
     }
   }
 }

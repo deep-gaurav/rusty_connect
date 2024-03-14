@@ -26,3 +26,25 @@ pub async fn pair(device_id: String, pair: bool) -> Result<JsValue, Box<dyn Erro
     let args = PairArgs { device_id, pair };
     Ok(invoke("pair", to_value(&args)?).await)
 }
+
+
+pub async fn send_ping(device_id: Option<String>)-> Result<JsValue, Box<dyn Error>> {
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SendPingArgs {
+        device_id: Option<String>,
+    }
+    let args = SendPingArgs { device_id };
+    Ok(invoke("send_ping", to_value(&args)?).await)
+}
+
+pub async fn send_clipboard(device_id: Option<String>)-> Result<JsValue, Box<dyn Error>> {
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SendClipboardArgs {
+        device_id: Option<String>,
+    }
+    let args = SendClipboardArgs { device_id };
+    Ok(invoke("send_clipboard", to_value(&args)?).await)
+}
+

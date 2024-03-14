@@ -1,18 +1,28 @@
 use std::net::SocketAddr;
 
-use async_graphql::{Object, SimpleObject};
+use async_graphql::{Context, Object, SimpleObject};
 use serde::{Deserialize, Serialize};
 
-
-use super::Plugin;
+use super::{Plugin, PluginExt};
 
 #[derive(Default)]
 pub struct Ping;
 
 #[Object]
 impl Ping {
-    pub async fn send_ping(&self) -> anyhow::Result<&str> {
-        Ok("Success")
+    pub async fn send_ping<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        device_id: Option<String>,
+    ) -> anyhow::Result<&str> {
+        self.send_payload(
+            context,
+            device_id.as_deref(),
+            "kdeconnect.battery",
+            PingPayload { message: None },
+        )
+        .await?;
+        Ok("success")
     }
 }
 

@@ -1,4 +1,5 @@
 mod app;
+mod components;
 mod device;
 mod device_list;
 mod invoke;
@@ -14,3 +15,4 @@ fn main() {
         view! { <App/> }
     })
 }
+
