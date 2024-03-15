@@ -11,6 +11,8 @@ use payloads::{PayloadType, RustyPayload};
 use plugins::PluginManager;
 use schema::subscription::Subscription;
 use schema::{mutation::Mutation, query::Query, GQSchema};
+use tokio_native_tls::native_tls::{self, Certificate, Identity, TlsAcceptor};
+use tokio_native_tls::TlsStream;
 
 use std::net::SocketAddr;
 use std::path::Path;
@@ -20,13 +22,8 @@ use tokio::net::{TcpListener, TcpStream, UdpSocket};
 
 use tokio::sync::RwLock;
 
-use tokio_rustls::rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, ServerName};
-use tokio_rustls::rustls::{ClientConfig, ServerConfig};
-use tokio_rustls::{TlsAcceptor, TlsConnector};
-
 use tracing::{debug, error, info, warn};
 
-use crate::cert::no_veifier::NoVerifier;
 use crate::payloads::{IdentityPayloadBody, Payload};
 
 pub mod cert;
@@ -54,9 +51,15 @@ impl RustyConnect {
         data_folder: &Path,
     ) -> anyhow::Result<Self> {
         tokio::fs::create_dir_all(data_folder).await?;
-        let cert_path = data_folder.join("cert");
-        let key_path = data_folder.join("key");
-        let certs = generate_cert(id, &cert_path, &key_path).await?;
+        let cert_path = data_folder.join("cert.pem");
+        let key_path = data_folder.join("key.pem");
+        let certs = match generate_cert(id, &cert_path, &key_path).await {
+            Ok(certs) => certs,
+            Err(err) => {
+                warn!("Error generating cert {err:?}");
+                return Err(err);
+            }
+        };
 
         let (tx, rx) = flume::bounded(0);
         let device_manager =
@@ -135,25 +138,37 @@ impl RustyConnect {
                                     );
                                     match identity {
                                         Ok(identity) => {
-                                            let config = ClientConfig::builder();
-                                            let (cert, key) = certs;
-                                            let config = config
-                                                .dangerous()
-                                                .with_custom_certificate_verifier(Arc::new(
-                                                    NoVerifier,
-                                                ))
-                                                .with_client_auth_cert(
-                                                    vec![cert.into()],
-                                                    PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
-                                                        key,
-                                                    )),
-                                                )
-                                                .unwrap();
-                                            match TlsConnector::from(Arc::new(config))
-                                                .connect(
-                                                    ServerName::IpAddress(address.ip().into()),
-                                                    socket,
-                                                )
+                                            let cert = match Certificate::from_pem(&certs.0) {
+                                                Ok(cert) => cert,
+                                                Err(err) => {
+                                                    warn!("Cannot generate cert {err:?}");
+                                                    return;
+                                                }
+                                            };
+                                            info!("got certificate ");
+                                            let key = match Identity::from_pkcs8(&certs.0, &certs.1)
+                                            {
+                                                Ok(identity) => identity,
+                                                Err(err) => {
+                                                    warn!("Cannot generate identity from certs {err:?}");
+                                                    return;
+                                                }
+                                            };
+                                            let connector = native_tls::TlsConnector::builder()
+                                                .danger_accept_invalid_certs(true)
+                                                .identity(key)
+                                                .build();
+                                            let connector = match connector {
+                                                Ok(connector) => {
+                                                    tokio_native_tls::TlsConnector::from(connector)
+                                                }
+                                                Err(err) => {
+                                                    warn!("Cannot accept cert {err:?}");
+                                                    return;
+                                                }
+                                            };
+                                            match connector
+                                                .connect(&address.to_string(), socket)
                                                 .await
                                             {
                                                 Ok(tls_stream) => {
@@ -169,7 +184,7 @@ impl RustyConnect {
                                                         Ok((tx, rx, connection_id)) => {
                                                             if let Err(err) =
                                                                 Self::handle_tls_stream(
-                                                                    tls_stream.into(),
+                                                                    tls_stream,
                                                                     address,
                                                                     device_id.clone(),
                                                                     tx,
@@ -420,7 +435,7 @@ impl RustyConnect {
     }
 
     pub async fn handle_tls_stream(
-        tls_stream: tokio_rustls::TlsStream<TcpStream>,
+        tls_stream: TlsStream<TcpStream>,
         _address: SocketAddr,
         device_id: String,
         tx: flume::Sender<PayloadType>,
@@ -500,19 +515,27 @@ impl RustyConnect {
         stream.write_all(&[b'\n']).await?;
         stream.flush().await?;
 
-        let config = ServerConfig::builder();
-        let (cert, key) = certs;
-        let config = config
-            .with_client_cert_verifier(Arc::new(NoVerifier))
-            .with_single_cert_with_ocsp(
-                vec![cert.into()],
-                PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key)),
-                vec![],
-            )?;
-        let tls_connector = TlsAcceptor::from(Arc::new(config));
+        // let cert = Certificate::from_pem(&certs.0)?;
+
+        let identity = Identity::from_pkcs8(&certs.0, &certs.1)?;
+
+        let tls_acceptor = TlsAcceptor::builder(identity).build()?;
+
+        // let config = ServerConfig::builder();
+        // let (cert, key) = certs;
+        // let config = config
+        //     .with_client_cert_verifier(Arc::new(NoVerifier))
+        //     .with_single_cert_with_ocsp(
+        //         vec![cert.into()],
+        //         PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key)),
+        //         vec![],
+        //     )?;
+        // let tls_connector = TlsAcceptor::from(Arc::new(config));
 
         info!("Upgrading to TLS Stream as server");
-        let tls_stream = tls_connector.accept(stream).await;
+
+        let tls_acceptor = tokio_native_tls::TlsAcceptor::from(tls_acceptor);
+        let tls_stream = tls_acceptor.accept(stream).await;
         let tls_stream = match tls_stream {
             Ok(stream) => stream,
             Err(err) => {
@@ -522,7 +545,7 @@ impl RustyConnect {
         };
         info!("Upgraded to TLS Stream");
 
-        Self::handle_tls_stream(tls_stream.into(), address, device_id, tx, rx).await?;
+        Self::handle_tls_stream(tls_stream, address, device_id, tx, rx).await?;
         Ok(())
     }
 }

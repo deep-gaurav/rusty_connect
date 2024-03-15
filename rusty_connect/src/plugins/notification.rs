@@ -10,16 +10,17 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
 };
-use tokio_rustls::{
-    rustls::{
-        pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, ServerName},
-        ClientConfig,
-    },
+use tokio_native_tls::{
+    // rustls::{
+    //     pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, ServerName},
+    //     ClientConfig,
+    // },
+    native_tls::{self, Identity},
     TlsConnector,
 };
 use tracing::{debug, info, warn};
 
-use crate::cert::{no_veifier::NoVerifier, CertPair};
+use crate::cert::CertPair;
 
 use super::Plugin;
 
@@ -127,22 +128,19 @@ impl Notification {
         let stream = TcpStream::connect(SocketAddr::new(address.ip(), port)).await?;
 
         debug!("TLS Config initializing");
-        let config = ClientConfig::builder();
-        let (cert, key) = certs;
-        let config = config
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(NoVerifier))
-            .with_client_auth_cert(
-                vec![cert.into()],
-                PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key)),
-            )?;
-        let tls_connector = TlsConnector::from(Arc::new(config));
+        let key = Identity::from_pkcs8(&certs.0, &certs.1)?;
+        let connector = native_tls::TlsConnector::builder()
+            .danger_accept_invalid_certs(true)
+            .identity(key)
+            .build()?;
+        let tls_connector = tokio_native_tls::TlsConnector::from(connector);
 
-        let server_name = ServerName::IpAddress(address.ip().into());
+        // let server_name = ServerName::IpAddress(address.ip().into());
+        let server_name = address.to_string();
         debug!("Upgrading to TLS Stream to server name: {server_name:?}");
-        let mut tls_stream = tls_connector.connect(server_name, stream).await?;
+        let mut tls_stream = tls_connector.connect(&server_name, stream).await?;
 
-        debug!("Creating file");
+        // debug!("Creating file");
         let mut file = tokio::fs::File::create(path).await?;
 
         let mut buffer = vec![0u8; BUFFER_SIZE];

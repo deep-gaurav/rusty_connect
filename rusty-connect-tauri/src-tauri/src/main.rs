@@ -68,14 +68,19 @@ fn setup(app: &mut App) -> Result<(), Box<dyn Error>> {
     let handle = app.app_handle();
     let handle2 = app.app_handle();
     let gqlport = GQL_PORT;
+
+    let (gql_starter_tx, gql_started_rx) = tokio::sync::oneshot::channel::<()>();
+
     tauri::async_runtime::spawn(async move {
         info!("Running GQL Server on port {gqlport}");
-        if let Err(err) = run_server(&handle, gqlport).await {
+        if let Err(err) = run_server(&handle, gqlport, gql_starter_tx).await {
             warn!("GQL Server stopped with error {err:?}")
         }
         info!("GQL Server Stopped");
         handle.exit(2);
     });
+    gql_started_rx.blocking_recv()?;
+    info!("Starting listener");
     let (started_tx, started_rx) = tokio::sync::oneshot::channel::<()>();
     tauri::async_runtime::spawn(async move {
         info!("Running GQL Subscription Listener from port {gqlport}");

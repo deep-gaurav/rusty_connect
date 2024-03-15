@@ -29,8 +29,8 @@ pub async fn listen_to_server(
     );
     let request_client = reqwest::Client::new();
 
-    let mut max_tries = 3;
-    let wait = std::time::Duration::from_secs(1);
+    let mut max_tries = 5;
+    let wait = std::time::Duration::from_secs(3);
     let is_server_running = loop {
         let response = graphql_client::reqwest::post_graphql::<BroadcastUdp, _>(
             &request_client,

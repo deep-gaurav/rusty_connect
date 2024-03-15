@@ -11,7 +11,11 @@ struct RustyConfig {
     device_type: String,
 }
 
-pub async fn run_server(apphandle: &AppHandle, port: u32) -> anyhow::Result<()> {
+pub async fn run_server(
+    apphandle: &AppHandle,
+    port: u32,
+    started_sender: tokio::sync::oneshot::Sender<()>,
+) -> anyhow::Result<()> {
     let local_app_dir = apphandle
         .path_resolver()
         .app_local_data_dir()
@@ -49,7 +53,9 @@ pub async fn run_server(apphandle: &AppHandle, port: u32) -> anyhow::Result<()> 
             }
         }
     };
-
+    started_sender
+        .send(())
+        .map_err(|_| anyhow::anyhow!("Cannot send started"))?;
     let mut rusty = RustyConnect::new(
         &config.device_id,
         &config.device_name,
