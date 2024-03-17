@@ -12,7 +12,7 @@ use tauri::{api::notification::Notification, AppHandle, Manager};
 use tracing::{debug, info, warn};
 
 use crate::{
-    plugins::battery::send_batery,
+    plugins::{battery::send_batery, share},
     state::{Devices, NotificationShown, NotificationState},
     system_tray::generate_system_tray_menu,
 };
@@ -170,6 +170,21 @@ pub async fn listen_to_server(
                     connection_subscription::RecievedPayloadFields::Payload(data)=>{
                         info!("Received unknown payload {data:#?}")
                     }
+                    connection_subscription::RecievedPayloadFields::SharePayload(payload) => {
+                        if let Some(download_id) = payload.download_id{
+                            let app = app.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let identity = {
+                                    app.state::<Devices>().devices.read().await.iter().find(|d|d.device.id == data.payloads.device_id).cloned()
+                                };
+                                if let Some(identity) = identity{
+                                    if let Err(err) =  share::monitor_download_progress(app, port, identity.device.identity,download_id).await{
+                                        warn!("Cannot send progress error {err:?}");
+                                    }
+                                }
+                            });
+                        }
+                    },
                 }
             }
         }
@@ -221,3 +236,6 @@ pub fn refresh_devices(request_client: &reqwest::Client, app: AppHandle, port: u
         }
     });
 }
+
+
+

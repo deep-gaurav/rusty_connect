@@ -1,4 +1,3 @@
-
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -15,12 +14,14 @@ use crate::payloads::{IdentityPayloadBody, PairPayloadBody, Payload};
 
 use self::battery::Batttery;
 use self::notification::Notification;
+use self::share::Share;
 use self::{clipboard::Clipboard, ping::Ping};
 
 pub mod battery;
 pub mod clipboard;
 pub mod notification;
 pub mod ping;
+pub mod share;
 
 pub trait Plugin: async_graphql::ObjectType + Sized {
     type PluginPayload: ObjectType + Serialize;
@@ -299,4 +300,4 @@ impl PluginManager {
     }
 }
 
-register_plugins!(Ping, Clipboard, Batttery, Notification);
+register_plugins!(Ping, Clipboard, Batttery, Notification, Share);

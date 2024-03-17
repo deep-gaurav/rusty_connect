@@ -2,6 +2,7 @@ mod app;
 mod components;
 mod device;
 mod device_list;
+mod file_progress;
 mod invoke;
 
 use app::*;

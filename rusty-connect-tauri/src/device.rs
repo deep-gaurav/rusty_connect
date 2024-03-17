@@ -1,6 +1,7 @@
 use api::all_devices::{
     DeviceFieldsPluginConfigsBatttery, DeviceFieldsPluginConfigsClipboard,
-    DeviceFieldsPluginConfigsNotification, DeviceFieldsPluginConfigsPing, DeviceWithStateFields,
+    DeviceFieldsPluginConfigsNotification, DeviceFieldsPluginConfigsPing,
+    DeviceFieldsPluginConfigsShare, DeviceWithStateFields,
 };
 use leptos::{component, create_resource, logging::warn, prelude::*, use_context, view, IntoView};
 use leptos_router::{use_navigate, use_params_map};
@@ -211,6 +212,25 @@ fn Device(device: DeviceWithStateFields) -> impl IntoView {
                                 notification_config
                             } else {
                                 DeviceFieldsPluginConfigsNotification {
+                                    enabled: true,
+                                }
+                            }
+                        };
+                        view! { <Switch state=config.enabled label="Receive Enabled".into()/> }
+                    }
+
+                </div>
+
+                <div class="p-4 min-w-40 shadow-lg rounded-lg bg-slate-50 border m-4">
+                    <i class="fa-solid fa-share"></i>
+                    <div class="text-lg font-medium">Share</div>
+
+                    {
+                        let config = {
+                            if let Some(share_config) = device.device.plugin_configs.share {
+                                share_config
+                            } else {
+                                DeviceFieldsPluginConfigsShare {
                                     enabled: true,
                                 }
                             }

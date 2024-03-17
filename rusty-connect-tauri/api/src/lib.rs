@@ -1,6 +1,8 @@
 use std::{collections::HashMap, default};
 
-use all_devices::{DeviceFields, DeviceWithStateFields, DeviceWithStateFieldsDevice};
+use all_devices::{
+    DeviceFields, DeviceWithStateFields, DeviceWithStateFieldsDevice, IdentityPayloadFields,
+};
 use graphql_client::GraphQLQuery;
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +22,11 @@ pub struct AllDevices;
 pub struct API {
     pub devices: Vec<DeviceWithStateFields>,
     pub event: KDEEvents,
+    pub download_progress: Option<(
+        String,
+        IdentityPayloadFields,
+        download_progress::DownloadProgressDownloadUpdate,
+    )>,
 }
 
 #[derive(Default, Clone, Serialize, Deserialize, Debug)]
@@ -36,6 +43,14 @@ pub enum KDEEvents {
     response_derives = "Debug"
 )]
 pub struct ConnectionSubscription;
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    query_path = "gql/queries.graphql",
+    schema_path = "gql/schema.graphql",
+    response_derives = "Debug,Clone,Serialize, Deserialize"
+)]
+pub struct DownloadProgress;
 
 #[derive(GraphQLQuery)]
 #[graphql(

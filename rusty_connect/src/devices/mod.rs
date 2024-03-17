@@ -2,17 +2,19 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use async_graphql::{Object, SimpleObject};
 use flume::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
 use tracing::debug;
 
 use crate::{
     cert::CertPair,
     payloads::{IdentityPayloadBody, PairPayloadBody, Payload, PayloadType, RustyPayload},
-    plugins::{PluginConfigs, PluginStates},
+    plugins::{share::DownloadProgress, PluginConfigs, PluginStates},
 };
 
 pub struct DeviceManager {
@@ -21,6 +23,8 @@ pub struct DeviceManager {
     pub receiver: flume::Receiver<PayloadType>,
     config_path: PathBuf,
     pub icons_path: PathBuf,
+    pub downloads_path: PathBuf,
+    pub download_tasks: Arc<Mutex<HashMap<String, tokio::sync::watch::Receiver<DownloadProgress>>>>,
     pub certs: CertPair,
 }
 
@@ -38,7 +42,9 @@ impl DeviceManager {
     ) -> anyhow::Result<Self> {
         let device_config = config_folder.join("devices");
         let icons_path = config_folder.join("icons_path");
+        let downloads_path = config_folder.join("downloads");
         tokio::fs::create_dir_all(&icons_path).await?;
+        tokio::fs::create_dir_all(&downloads_path).await?;
         let config = 'config: {
             if let Ok(data) = tokio::fs::read(&device_config).await {
                 if let Ok(config) = serde_json::from_slice(&data) {
@@ -63,7 +69,9 @@ impl DeviceManager {
             receiver,
             config_path: device_config.clone(),
             icons_path,
+            downloads_path,
             certs,
+            download_tasks: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 

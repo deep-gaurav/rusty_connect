@@ -48,6 +48,9 @@ fragment DeviceFields on Device {
     notification{
       enabled
     }
+    share{
+      enabled
+    }
   }
   pluginStates {
     batttery {
@@ -95,6 +98,13 @@ fragment RecievedPayloadFields on ReceivedPayload {
   }
   ... on NotificationPayload {
     ...NotificationFields
+  }
+  ... on SharePayload{
+    downloadId
+    filename
+    lastModified
+    numberOfFiles
+    totalPayloadSize
   }
 }
 
@@ -151,6 +161,26 @@ subscription ConnectionSubscription {
     deviceId
     payload {
       ...RecievedPayloadFields
+    }
+  }
+}
+
+subscription DownloadProgress($downloadId:String!) {
+  downloadUpdate(downloadId:$downloadId){
+    __typename
+    ... on DownloadFailed{
+      reason
+    }
+    ... on NotStarted{
+      totalBytes
+    }
+    ... on Completed{
+      totalBytes
+      path
+    }
+    ... on Progress{
+      totalBytes
+      readBytes
     }
   }
 }

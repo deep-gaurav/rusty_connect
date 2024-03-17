@@ -8,7 +8,7 @@ use tracing::debug;
 
 use crate::{
     devices::DeviceManager,
-    plugins::{Connected, Disconnected, PluginManager, ReceivedPayload},
+    plugins::{share::DownloadProgress, Connected, Disconnected, PluginManager, ReceivedPayload},
 };
 
 pub struct Subscription {
@@ -79,6 +79,31 @@ impl Subscription {
             debug!("Stopped listening for payload")
         };
         stream
+    }
+
+    async fn download_update(
+        &self,
+        download_id: String,
+    ) -> anyhow::Result<impl Stream<Item = DownloadProgress>> {
+        let mut task_rx = {
+            let dm = self.device_manager.read().await;
+            let tasks = dm.download_tasks.lock().await;
+            let task = tasks
+                .get(&download_id)
+                .ok_or(anyhow::anyhow!("No download task with given id"))?;
+            task.clone()
+        };
+        let stream = stream! {
+            loop {
+                let val = {task_rx.borrow_and_update().clone()};
+                yield val;
+                if task_rx.changed().await.is_err() {
+                    break;
+                }
+            }
+        };
+
+        Ok(stream)
     }
 }
 

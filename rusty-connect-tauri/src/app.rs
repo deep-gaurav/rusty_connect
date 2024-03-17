@@ -7,9 +7,7 @@ use serde_wasm_bindgen::to_value;
 use wasm_bindgen::prelude::*;
 
 use crate::{
-    device::{DevicePage, DeviceTile},
-    device_list::DeviceList,
-    invoke::{invoke, refresh_devices},
+    device::{DevicePage, DeviceTile}, device_list::DeviceList, file_progress::ProgressNotificationToaster, invoke::{invoke, refresh_devices}
 };
 
 #[component]
@@ -25,6 +23,7 @@ pub fn App() -> impl IntoView {
 
     view! {
         <main class="bg-slate-50 dark:bg-gray-950 h-full p-4 dark:text-slate-400">
+            <ProgressNotificationToaster/>
             <Router>
                 <Routes>
                     <Route
@@ -48,6 +47,8 @@ pub fn App() -> impl IntoView {
         </main>
     }
 }
+
+
 
 
 

@@ -45,6 +45,11 @@ type ClipboardState {
   enabled: Boolean!
 }
 
+type Completed {
+  totalBytes: Int!
+  path: String!
+}
+
 type Connected {
   id: String!
 }
@@ -66,6 +71,12 @@ type Disconnected {
   id: String!
 }
 
+type DownloadFailed {
+  reason: String!
+}
+
+union DownloadProgress = NotStarted | Progress | Completed | DownloadFailed
+
 type IdentityPayloadBody {
   deviceName: String!
   deviceId: String!
@@ -83,6 +94,10 @@ type Mutation {
   plugins: PluginManager!
   broadcastIdentityUdp: IdentityPayloadBody!
   pair(id: String!, pair: Boolean!): DeviceWithState!
+}
+
+type NotStarted {
+  totalBytes: Int!
 }
 
 type Notification {
@@ -143,6 +158,7 @@ type PluginConfigs {
   clipboard: ClipboardConfig
   batttery: BatteryConfig
   notification: NotificationConfig
+  share: ShareConfig
 }
 
 type PluginManager {
@@ -150,6 +166,7 @@ type PluginManager {
   clipboard: Clipboard!
   batttery: Batttery!
   notification: Notification!
+  share: Share!
 }
 
 type PluginStates {
@@ -157,6 +174,12 @@ type PluginStates {
   clipboard: ClipboardState!
   batttery: BatteryState!
   notification: NotificationState!
+  share: ShareState!
+}
+
+type Progress {
+  totalBytes: Int!
+  readBytes: Int!
 }
 
 type Query {
@@ -179,8 +202,31 @@ union ReceivedPayload =
   | ClipboardPayload
   | BatteryPayload
   | NotificationPayload
+  | SharePayload
   | Payload
+
+type Share {
+  sendFile: String!
+}
+
+type ShareConfig {
+  enabled: Boolean!
+}
+
+type SharePayload {
+  text: String
+  filename: String
+  lastModified: Int
+  numberOfFiles: Int
+  totalPayloadSize: Int
+  downloadId: String
+}
+
+type ShareState {
+  enabled: Boolean!
+}
 
 type Subscription {
   payloads: ReceivedMessage!
+  downloadUpdate(downloadId: String!): DownloadProgress!
 }
