@@ -73,7 +73,7 @@ impl Plugin for Notification {
                     ) {
                         let file_path = self.icons_path.join(hash);
                         let port = transfer_info.port;
-                        notif_payload.icon_path = Some(file_path.to_string_lossy().to_string());
+                        notif_payload.icon_path = Some(hash.to_string());
 
                         if let Err(err) = Self::receive_icon(
                             address,

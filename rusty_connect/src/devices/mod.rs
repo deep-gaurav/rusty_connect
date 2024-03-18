@@ -13,8 +13,11 @@ use tracing::debug;
 
 use crate::{
     cert::CertPair,
-    payloads::{IdentityPayloadBody, PairPayloadBody, Payload, PayloadType, RustyPayload},
-    plugins::{share::DownloadProgress, PluginConfigs, PluginStates},
+    payloads::{IdentityPayloadBody, PairPayloadBody, Payload, PayloadType},
+    plugins::{
+        share::DownloadProgress, Connected, Disconnected, PluginConfigs, PluginStates,
+        ReceivedPayload,
+    },
 };
 
 pub struct DeviceManager {
@@ -98,7 +101,10 @@ impl DeviceManager {
         let (tx, rx) = flume::bounded(0);
         let id = uuid::Uuid::new_v4();
         *state = DeviceState::Active(id, address, tx);
-        if let Err(err) = self.sender.try_send((device_id, RustyPayload::Connected)) {
+        if let Err(err) = self.sender.try_send((
+            device_id.clone(),
+            ReceivedPayload::Connected(Connected { id: device_id }),
+        )) {
             debug!("Error sending connected message {err:?}");
         }
         self.save().await?;
@@ -131,10 +137,12 @@ impl DeviceManager {
             DeviceState::Active(id, _, _) => {
                 if id == connection_id {
                     entry.state = DeviceState::InActive;
-                    if let Err(err) = self
-                        .sender
-                        .try_send((device_id.to_string(), RustyPayload::Disconnect))
-                    {
+                    if let Err(err) = self.sender.try_send((
+                        device_id.to_string(),
+                        ReceivedPayload::Disconnected(Disconnected {
+                            id: device_id.to_string(),
+                        }),
+                    )) {
                         debug!("Error sending disconnected message {err:?}");
                     }
                     Ok(())

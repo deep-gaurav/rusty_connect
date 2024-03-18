@@ -7,8 +7,8 @@ use cert::CertPair;
 use devices::DeviceManager;
 
 use mdns_sd::ServiceInfo;
-use payloads::{PayloadType, RustyPayload};
-use plugins::PluginManager;
+use payloads::PayloadType;
+use plugins::{PluginManager, ReceivedPayload};
 use schema::subscription::Subscription;
 use schema::{mutation::Mutation, query::Query, GQSchema};
 use tokio_native_tls::native_tls::{self, Certificate, Identity, TlsAcceptor};
@@ -88,6 +88,8 @@ impl RustyConnect {
         let tcp_fut = {
             // let certs = certs.clone();
             let device_manager = self.device_manager.clone();
+            let plugin_manager = self.plugin_manager.clone();
+
             async move {
                 info!("Waiting for device");
                 loop {
@@ -96,6 +98,7 @@ impl RustyConnect {
                             info!("Connected from address {address:?}");
                             let certs = certs.clone();
                             let device_manager = device_manager.clone();
+                            let plugin_manager = plugin_manager.clone();
 
                             tokio::spawn(async move {
                                 let identity = {
@@ -189,6 +192,8 @@ impl RustyConnect {
                                                                     device_id.clone(),
                                                                     tx,
                                                                     rx,
+                                                                    plugin_manager.clone(),
+                                                                    device_manager.clone(),
                                                                 )
                                                                 .await
                                                             {
@@ -261,6 +266,8 @@ impl RustyConnect {
         .data(self.plugin_manager.clone())
         .finish();
 
+        let icons_path = { self.device_manager.read().await.icons_path.clone() };
+        let icons_server = tower_http::services::ServeDir::new(icons_path);
         let app = axum::Router::new()
             .route(
                 "/",
@@ -269,6 +276,7 @@ impl RustyConnect {
                 )))
                 .post_service(GraphQL::new(schema.clone())),
             )
+            .nest_service("/icons", icons_server)
             .route_service("/ws", GraphQLSubscription::new(schema));
         let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
 
@@ -384,6 +392,7 @@ impl RustyConnect {
                             match device {
                                 Ok((tx, rx, connection_id)) => {
                                     let dm = self.device_manager.clone();
+                                    let pm = self.plugin_manager.clone();
                                     tokio::spawn(async move {
                                         if let Err(err) = Self::connect_to(
                                             address,
@@ -393,6 +402,8 @@ impl RustyConnect {
                                             device_id.clone(),
                                             tx,
                                             rx,
+                                            pm,
+                                            dm.clone(),
                                         )
                                         .await
                                         {
@@ -440,6 +451,9 @@ impl RustyConnect {
         device_id: String,
         tx: flume::Sender<PayloadType>,
         rx: flume::Receiver<Payload>,
+
+        plugin_manager: Arc<PluginManager>,
+        device_manager: Arc<RwLock<DeviceManager>>,
     ) -> anyhow::Result<()> {
         debug!("Listening TLS for id {device_id:?}");
 
@@ -477,13 +491,28 @@ impl RustyConnect {
                     // }
                     match serde_json::from_slice::<Payload>(&data_buffer[..position]) {
                         Ok(payload) => {
-                            match tx.try_send((
-                                device_id.to_string(),
-                                RustyPayload::KDEConnectPayload(payload),
-                            )) {
-                                Err(err) => warn!("Nothing to handle payload {err:?}"),
-                                Ok(_) => debug!("Sent payload to channel"),
-                            }
+                            let tx = tx.clone();
+                            let device_id = device_id.clone();
+                            let plugin_manager = plugin_manager.clone();
+                            let device_manager = device_manager.clone();
+                            tokio::spawn(async move {
+                                match Self::process_payload(
+                                    &device_id,
+                                    payload,
+                                    plugin_manager,
+                                    device_manager,
+                                )
+                                .await
+                                {
+                                    Ok(payload) => {
+                                        match tx.try_send((device_id.to_string(), payload)) {
+                                            Err(err) => warn!("Nothing to handle payload {err:?}"),
+                                            Ok(_) => debug!("Sent payload to channel"),
+                                        }
+                                    }
+                                    Err(e) => warn!("Error processing payload {e:#?}"),
+                                }
+                            });
                         }
                         Err(err) => {
                             warn!("parse failed {err:#?}")
@@ -509,6 +538,9 @@ impl RustyConnect {
         device_id: String,
         tx: flume::Sender<PayloadType>,
         rx: flume::Receiver<Payload>,
+
+        plugin_manager: Arc<PluginManager>,
+        device_manager: Arc<RwLock<DeviceManager>>,
     ) -> anyhow::Result<()> {
         let mut stream = TcpStream::connect(SocketAddr::new(address.ip(), port)).await?;
 
@@ -549,7 +581,43 @@ impl RustyConnect {
         };
         info!("Upgraded to TLS Stream");
 
-        Self::handle_tls_stream(tls_stream, address, device_id, tx, rx).await?;
+        Self::handle_tls_stream(
+            tls_stream,
+            address,
+            device_id,
+            tx,
+            rx,
+            plugin_manager,
+            device_manager,
+        )
+        .await?;
         Ok(())
+    }
+
+    async fn process_payload(
+        device_id: &str,
+        payload: Payload,
+        plugin_manager: Arc<PluginManager>,
+        device_manager: Arc<RwLock<DeviceManager>>,
+    ) -> anyhow::Result<ReceivedPayload> {
+        let device = {
+            let devices = device_manager.read().await;
+            devices
+                .devices
+                .get(device_id)
+                .ok_or(anyhow::anyhow!("No device with given Id"))?
+                .clone()
+        };
+        debug!("parsing payload");
+        let payload = plugin_manager.parse_payload(payload, Some(&device)).await?;
+        debug!("parsed payload");
+        {
+            let mut dm = device_manager.write().await;
+            if let Some(device) = dm.devices.get_mut(device_id) {
+                plugin_manager.update_state(&payload, device);
+            }
+        }
+        debug!("emitting payload");
+        Ok(payload)
     }
 }

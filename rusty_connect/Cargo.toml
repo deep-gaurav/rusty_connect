@@ -33,6 +33,7 @@ hostname = "^0.3"
 base64 = "0.22.0"
 rand = "0.8.5"
 rsa = "0.9.6"
+tower-http = { version = "0.5.2", features = ["fs"] }
 # pkix = "0.2.3"
 
 [dev-dependencies]

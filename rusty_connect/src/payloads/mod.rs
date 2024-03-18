@@ -2,15 +2,9 @@ use async_graphql::{Object, SimpleObject};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::utils::get_timestamp;
+use crate::{plugins::ReceivedPayload, utils::get_timestamp};
 
-pub enum RustyPayload {
-    Connected,
-    Disconnect,
-    KDEConnectPayload(Payload),
-}
-
-pub type PayloadType = (String, RustyPayload);
+pub type PayloadType = (String, ReceivedPayload);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]

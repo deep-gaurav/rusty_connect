@@ -25,56 +25,11 @@ impl Subscription {
             dm.receiver.clone()
         };
         debug!("Got Receiver");
-
-        let plugin_manager = { self.plugin_manager.clone() };
-        let device_manager = self.device_manager.clone();
-
         let stream = stream! {
             debug!("Listening for new payload from channel");
             while let Ok((device_id,payload)) = receiver.recv_async().await {
                 debug!("Received payload from channel");
-
-                let device = {
-                    let dm = device_manager.read().await;
-                    let device =  dm.devices.get(&device_id);
-                    device.cloned()
-                };
-                if let Some(device) = &device {
-
-                    match payload {
-                        crate::payloads::RustyPayload::Connected => yield ReceivedMessage {
-                            device_id:device_id.clone(),
-                            payload:ReceivedPayload::Connected(
-                                Connected{
-                                    id:device_id
-                                }
-                            )
-                        },
-                        crate::payloads::RustyPayload::Disconnect => yield ReceivedMessage {
-                            device_id:device_id.clone(),
-                            payload:ReceivedPayload::Disconnected(
-                                Disconnected{
-                                    id:device_id
-                                }
-                            )
-                        },
-                        crate::payloads::RustyPayload::KDEConnectPayload(payload) => {
-                            debug!("parsing payload");
-                            if let Ok(payload) = plugin_manager.parse_payload(payload,Some(device)).await{
-                                debug!("parsed payload");
-                                {
-                                    let mut dm = device_manager.write().await;
-                                    if let Some(device) = dm.devices.get_mut(&device_id){
-                                        plugin_manager.update_state(&payload,device);
-                                    }
-                                }
-                                debug!("emitting payload");
-                                yield ReceivedMessage { device_id, payload }
-                            }
-                        },
-                    }
-                }
-
+                yield ReceivedMessage { device_id, payload }
             }
             debug!("Stopped listening for payload")
         };
