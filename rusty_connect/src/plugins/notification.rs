@@ -72,20 +72,23 @@ impl Plugin for Notification {
                         &notif_payload.payload_hash,
                     ) {
                         let file_path = self.icons_path.join(hash);
-                        let port = transfer_info.port;
-                        notif_payload.icon_path = Some(hash.to_string());
-
-                        if let Err(err) = Self::receive_icon(
-                            address,
-                            port,
-                            size as usize,
-                            file_path.as_path(),
-                            self.certs.clone(),
-                        )
-                        .await
-                        {
-                            warn!("Cannot get icon {err:?}")
+                        if let Ok(true) = tokio::fs::try_exists(&file_path).await {
+                            info!("Icon already exists");
+                        } else {
+                            let port = transfer_info.port;
+                            if let Err(err) = Self::receive_icon(
+                                address,
+                                port,
+                                size as usize,
+                                file_path.as_path(),
+                                self.certs.clone(),
+                            )
+                            .await
+                            {
+                                warn!("Cannot get icon {err:?}")
+                            }
                         }
+                        notif_payload.icon_path = Some(hash.to_string());
                     }
                     info!("Returning notification payload");
                     return Some(notif_payload);
