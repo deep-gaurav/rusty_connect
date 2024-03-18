@@ -462,6 +462,10 @@ impl RustyConnect {
             let mut buf = vec![0u8; 1024];
             let mut data_buffer = vec![];
             while let Ok(n) = read_stream.read(&mut buf).await {
+                if n == 0 {
+                    info!("Read 0, disconnected");
+                    break;
+                }
                 let data = &buf[..n];
                 data_buffer.extend_from_slice(data);
                 if let Some(position) = data_buffer.iter().position(|el| *el == b'\n') {
