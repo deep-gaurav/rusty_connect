@@ -11,6 +11,7 @@ use payloads::PayloadType;
 use plugins::{PluginManager, ReceivedPayload};
 use schema::subscription::Subscription;
 use schema::{mutation::Mutation, query::Query, GQSchema};
+use socket2::TcpKeepalive;
 use tokio_native_tls::native_tls::{self, Certificate, Identity, TlsAcceptor};
 use tokio_native_tls::TlsStream;
 
@@ -28,6 +29,7 @@ use crate::payloads::{IdentityPayloadBody, Payload};
 
 pub mod cert;
 pub mod devices;
+pub mod network;
 pub mod payloads;
 pub mod plugins;
 pub mod schema;
@@ -94,7 +96,14 @@ impl RustyConnect {
                 info!("Waiting for device");
                 loop {
                     match tcp_listener.accept().await {
-                        Ok((mut socket, address)) => {
+                        Ok((socket, address)) => {
+                            let mut socket = match network::set_tcp_timeouts(socket) {
+                                Ok(stream) => stream,
+                                Err(err) => {
+                                    warn!("Cannot set keepalives {err:?} disconnecting");
+                                    continue;
+                                }
+                            };
                             info!("Connected from address {address:?}");
                             let certs = certs.clone();
                             let device_manager = device_manager.clone();
@@ -362,7 +371,7 @@ impl RustyConnect {
                         }
                     }
                     _other_event => {
-                        // info!("Received other service event {other_event:?}")
+                        info!("Received other mdns service event {_other_event:?}")
                     }
                 }
             }
@@ -442,6 +451,8 @@ impl RustyConnect {
             }
             buf.clear();
         }
+
+        info!("Broadcast receiver stopped");
         Ok(())
     }
 
@@ -542,8 +553,8 @@ impl RustyConnect {
         plugin_manager: Arc<PluginManager>,
         device_manager: Arc<RwLock<DeviceManager>>,
     ) -> anyhow::Result<()> {
-        let mut stream = TcpStream::connect(SocketAddr::new(address.ip(), port)).await?;
-
+        let stream = TcpStream::connect(SocketAddr::new(address.ip(), port)).await?;
+        let mut stream = network::set_tcp_timeouts(stream)?;
         let value = serde_json::to_value(identity.clone())?;
         let identity_payload = Payload::generate_new("kdeconnect.identity", value);
         let idenity_bytes = serde_json::to_vec(&identity_payload)?;

@@ -13,12 +13,14 @@ use crate::devices::{DeviceManager, DeviceState, DeviceWithState};
 use crate::payloads::{IdentityPayloadBody, PairPayloadBody, Payload};
 
 use self::battery::Batttery;
+use self::mousepad::Mousepad;
 use self::notification::Notification;
 use self::share::Share;
 use self::{clipboard::Clipboard, ping::Ping};
 
 pub mod battery;
 pub mod clipboard;
+pub mod mousepad;
 pub mod notification;
 pub mod ping;
 pub mod share;
@@ -300,4 +302,4 @@ impl PluginManager {
     }
 }
 
-register_plugins!(Ping, Clipboard, Batttery, Notification, Share);
+register_plugins!(Ping, Clipboard, Batttery, Notification, Share, Mousepad);

@@ -86,7 +86,8 @@ pub async fn listen_to_server(
                     connection_subscription::ConnectionSubscriptionPayloadsPayload::IdentityPayloadBody(_) => {
                         refresh_devices(&request_client, app.clone(), port);
                     },
-                    connection_subscription::ConnectionSubscriptionPayloadsPayload::PairPayloadBody(_) => {
+                    connection_subscription::ConnectionSubscriptionPayloadsPayload::PairPayloadBody(pair_data) => {
+                            info!("Received pair payload {pair_data:#?} device {}",data.payloads.device_id);
                             if let Err(err) =  (API{
                                 event:api::KDEEvents::PairRequest(data.payloads.device_id),
                                 ..Default::default()
